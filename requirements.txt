@@ -6,9 +6,7 @@ bs4
 pandas 
 numpy
 spacy
-math
 scikit-learn
 matplotlib
-time
 urllib3
 altair

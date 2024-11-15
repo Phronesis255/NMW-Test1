@@ -1,1 +1,15 @@
 streamlit
+streamlit_ace
+googlesearch-python
+requests
+bs4 
+pandas 
+numpy 
+re
+spacy
+math
+scikit-learn
+matplotlib
+time
+urllib3
+altair

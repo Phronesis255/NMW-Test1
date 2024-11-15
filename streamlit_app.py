@@ -15,7 +15,12 @@ from urllib.parse import urlparse
 import altair as alt
 
 # Load SpaCy model for POS tagging
-nlp = spacy.load('en_core_web_sm')
+try:
+    nlp = spacy.load('en_core_web_sm')
+except OSError:
+    from spacy.cli import download
+    download('en_core_web_sm')
+    nlp = spacy.load('en_core_web_sm')
 
 # Function to extract content from a URL with retries and user-agent header
 def extract_content_from_url(url, retries=2, timeout=5):

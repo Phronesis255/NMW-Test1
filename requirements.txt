@@ -4,8 +4,7 @@ googlesearch-python
 requests
 bs4 
 pandas 
-numpy 
-re
+numpy
 spacy
 math
 scikit-learn

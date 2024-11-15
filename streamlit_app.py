@@ -294,8 +294,8 @@ def display_editor():
     # Display words to check in the sidebar
     with st.sidebar:
         # Update sidebar label
-        st.markdown("<div style='text-align: center; font-size: 24px; font-weight: bold;'>Optimize Your Content with These Words</div>", unsafe_allow_html=True)
-        st.markdown("<div style='padding: 10px; background-color: #f8f9fa; border-radius: 10px;'>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: center; font-size: 24px; font-weight: bold;'>Word Frequency</div>", unsafe_allow_html=True)
+        st.markdown("<div style='padding: 5px; background-color: #f8f9fa; border-radius: 15px;'>", unsafe_allow_html=True)
         if text_input.strip():
             for idx, row in comparison_chart_data.iterrows():
                 word = row['Terms']
@@ -313,9 +313,9 @@ def display_editor():
                     color = "#b0DD7c"  # Medium Blue
 
                 # Display term with color and occurrence info
-                st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; padding: 8px; background-color: {color}; color: black; border-radius: 5px;'>"
+                st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 0px; padding: 8px; background-color: {color}; color: black; border-radius: 5px;'>"
                             f"<span style='font-weight: bold;'>{word}</span>"
-                            f"<span>{occurrences} Occurrences (Target: {min_occurrences}-{max_occurrences})</span>"
+                            f"<span>{occurrences} / ({min_occurrences}-{max_occurrences})</span>"
                             f"</div>", unsafe_allow_html=True)
 
                 # Calculate progress toward minimum occurrences

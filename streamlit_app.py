@@ -63,7 +63,7 @@ def get_top_10_unique_domain_results(keyword):
             if domain not in domains:
                 domains.add(domain)
                 results.append(url)
-            if len(results) == 10:
+            if len(results) == 3:
                 break
         return results
     except Exception as e:
@@ -80,7 +80,7 @@ def filter_terms(terms):
     return filtered_terms
 
 def perform_analysis(keyword):
-    st.info('Retrieving top 10 search results...')
+    st.info('Retrieving top 10 search results... (Demo version will load only the top 3 results)')
     top_urls = get_top_10_unique_domain_results(keyword)
     if not top_urls:
         st.error('No results found.')

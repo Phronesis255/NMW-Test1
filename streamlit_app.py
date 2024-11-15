@@ -205,11 +205,9 @@ def main():
             word_count = len(text_input.split()) if text_input.strip() else 0
 
             # Display the word count below the editor for better visibility
-            st.markdown(f"<div style='padding: 10px; font-size: 18px;'>Word count: <strong>{word_count}</strong></div>", unsafe_allow_html=True)
 
             #redraw the chart
             if 'chart_data' in st.session_state:
-                st.subheader('Comparison of Average TF and Editor TF Scores')
 
                 # Calculate TF-IDF scores for each term in the editor content
                 if text_input.strip():
@@ -225,7 +223,33 @@ def main():
                         'Editor TF Score': editor_tf_scores
                     })
 
-                    # Create Altair chart with bars and lines
+                    # Calculate matching percentage
+                    relative_differences = []
+                    epsilon = 1e-6
+                    for idx, word_info in enumerate(words_to_check):
+                        tf_score = editor_tf_scores[idx]
+                        avg_tf_score = word_info['Average TF Score']
+                        relative_difference = 1 - abs(tf_score - avg_tf_score) / (avg_tf_score + epsilon)
+                        relative_difference = max(0, min(1, relative_difference))  # Clip between 0 and 1
+                        relative_differences.append(relative_difference)
+
+                    matching_percentage = (sum(relative_differences) / len(relative_differences)) * 100
+                    
+                    st.markdown(f"""
+                <div style='display: flex; justify-content: space-between; padding: 15px; background-color: #f0f0f0; border-radius: 10px;'>
+                    <div style='font-size: 18px; color: #004d99;'>
+                        Word Count: <strong>{word_count}</strong>
+                    </div>
+                    <div style='font-size: 18px; color: #990000;'>
+                        Matching Score: <strong>{matching_percentage:.2f}%</strong>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+
+                    # Create Altair chart with bars and lines                    
+                    st.subheader('Comparison of Average TF and Editor TF Scores')
+
                     base = alt.Chart(comparison_chart_data).encode(x=alt.X('Terms:N', sort='-y', title='Terms'))
 
                     bar = base.mark_bar(color='steelblue').encode(

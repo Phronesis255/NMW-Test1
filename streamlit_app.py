@@ -155,7 +155,7 @@ def perform_analysis(keyword):
     # Plot the stacked bar chart using st.bar_chart
     st.subheader('Top 50 Words - Average TF and TF-IDF Scores')
     chart_data = st.session_state['chart_data'].set_index('Terms')
-    st.bar_chart(chart_data)
+    st.bar_chart(chart_data,color=["#FFAA00", "#6495ED"])
 
 def display_editor():
     # Add a button to start a new analysis

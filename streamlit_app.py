@@ -15,12 +15,7 @@ from urllib.parse import urlparse
 import altair as alt
 
 # Load SpaCy model for POS tagging
-try:
-    nlp = spacy.load('en_core_web_sm')
-except OSError:
-    from spacy.cli import download
-    download('en_core_web_sm')
-    nlp = spacy.load('en_core_web_sm')
+nlp = spacy.load('en_core_web_sm')
 
 # Function to extract content from a URL with retries and user-agent header
 def extract_content_from_url(url, retries=2, timeout=5):
@@ -238,22 +233,7 @@ def main():
 
                     combined_chart = (bar + line).properties(width=600, height=400)
                     st.altair_chart(combined_chart, use_container_width=True)
-
-                    # Calculate matching percentage
-                    relative_differences = []
-                    epsilon = 1e-6
-                    for idx, word_info in enumerate(words_to_check):
-                        tf_score = text_tf_scores[idx]
-                        avg_tf_score = word_info['Average TF Score']
-                        relative_difference = 1 - abs(tf_score - avg_tf_score) / (avg_tf_score + epsilon)
-                        relative_difference = max(0, min(1, relative_difference))  # Clip between 0 and 1
-                        relative_differences.append(relative_difference)
-
-                    matching_percentage = (sum(relative_differences) / len(relative_differences)) * 100
                     
-                    # Display the matching score percentage
-                    st.markdown(f"<div style='padding: 10px; font-size: 20px;'>Matching Score: <strong>{matching_percentage:.2f}%</strong></div>", unsafe_allow_html=True)
-
         # Calculate TF scores for each term in the sidebar based on the editor content
         if text_input.strip():
             total_words = len(text_input.split())

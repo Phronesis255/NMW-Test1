@@ -72,10 +72,12 @@ def get_top_10_unique_domain_results(keyword):
 
 # Function to filter out stopwords, auxiliary verbs, and other less informative words
 def filter_terms(terms):
+    custom_stopwords = set(["i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "way", "yours", "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now"])
+    
     filtered_terms = []
     for term in terms:
         doc = nlp(term)
-        if not doc[0].is_stop and doc[0].pos_ not in ['AUX', 'PRON', 'DET', 'ADP', 'CCONJ']:
+        if not doc[0].is_stop and doc[0].pos_ not in ['AUX', 'PRON', 'DET', 'ADP', 'CCONJ'] and (doc[0].pos_ not in custom_stopwords and doc[0].pos_ not in nlp.Defaults.stop_words:
             filtered_terms.append(term)
     return filtered_terms
 

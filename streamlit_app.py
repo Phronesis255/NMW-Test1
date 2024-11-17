@@ -77,7 +77,7 @@ def filter_terms(terms):
     filtered_terms = []
     for term in terms:
         doc = nlp(term)
-        if not doc[0].is_stop and doc[0].pos_ not in ['AUX', 'PRON', 'DET', 'ADP', 'CCONJ'] and (doc[0].pos_ not in custom_stopwords and doc[0].pos_ not in nlp.Defaults.stop_words:
+        if not doc[0].is_stop and doc[0].pos_ not in ['AUX', 'PRON', 'DET', 'ADP', 'CCONJ'] and doc[0].pos_ not in custom_stopwords and doc[0].pos_ not in nlp.Defaults.stop_words:
             filtered_terms.append(term)
     return filtered_terms
 

@@ -1,4 +1,4 @@
-# 🎈 Needs More Words - Optimize Your Content
+# 🥣🔤 Needs More Words - Optimize Your Content
 
 Let's you know what topics and words you need to include in your content and suggests how long it should be, based on top 20 results from Google.
 

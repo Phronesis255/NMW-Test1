@@ -16,6 +16,20 @@ from streamlit_quill import st_quill  # Import the streamlit-quill component
 from googlesearch import search
 import altair as alt
 
+st.set_page_config(page_title="Needs More Words! Optimize Your Content", page_icon="🔠")
+
+st.markdown("""
+    <style>n
+        .reportview-container {
+            margin-top: -2em;
+        }
+        #MainMenu {visibility: hidden;}
+        .stDeployButton {display:none;}
+        footer {visibility: hidden;}
+        #stDecoration {display:none;}
+    </style>
+""", unsafe_allow_html=True)
+
 # Load SpaCy model for POS tagging with caching
 @st.cache_resource
 def load_spacy_model():
@@ -28,10 +42,21 @@ def load_spacy_model():
 
 nlp = load_spacy_model()
 
-# Function to lemmatize text
+# Function to lemmatize text with custom overrides
 def lemmatize_text(text):
     doc = nlp(text)
-    return ' '.join([token.lemma_ for token in doc])
+    lemmatized_tokens = []
+    for token in doc:
+        # Context-aware overrides for specific terms
+        if token.text.lower() == "media" and token.lemma_.lower() == "medium":
+            lemmatized_tokens.append("media")
+        elif token.text.lower() == "data" and token.lemma_.lower() == "datum":
+            lemmatized_tokens.append("data")
+        elif token.text.lower() == "publishers" and token.lemma_.lower() == "publisher":
+            lemmatized_tokens.append("publisher")
+        else:
+            lemmatized_tokens.append(token.lemma_)
+    return ' '.join(lemmatized_tokens)
 
 # Function to extract content from a URL with retries and user-agent header
 @st.cache_data
@@ -88,6 +113,29 @@ def get_top_unique_domain_results(keyword, num_results=50, max_domains=50):
         st.error(f"Error during Google search: {e}")
         return []
 
+def compute_embedding(text, embeddings_index):
+    words = text.lower().split()
+    embeddings = []
+    for word in words:
+        if word in embeddings_index:
+            embeddings.append(embeddings_index[word])
+    if embeddings:
+        return np.mean(embeddings, axis=0)
+    else:
+        return None
+
+
+@st.cache_resource
+def load_glove_embeddings(glove_file_path):
+    embeddings_index = {}
+    with open(glove_file_path, 'r', encoding='utf8') as f:
+        for line in f:
+            values = line.split()
+            word = values[0]  # The word
+            coefs = np.asarray(values[1:], dtype='float32')
+            embeddings_index[word] = coefs
+    return embeddings_index
+
 # Function to filter out value-less terms and custom stopwords
 def filter_terms(terms):
     custom_stopwords = set(["i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "way", "yours", "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", "don", "should", "now", "like", "need"])
@@ -124,8 +172,8 @@ def perform_analysis(keyword):
     favicons = []
     retrieved_content = []
     successful_urls = []
-    word_counts = []  # New list to store word counts    
-    max_contents = 25  # Increased from 10 to 25
+    word_counts = []
+    max_contents = 15
 
     for idx, url in enumerate(top_urls):
         # Remove status messages after a short delay
@@ -138,19 +186,21 @@ def perform_analysis(keyword):
         if title is None:
             title = "No Title"
         if content:
+            word_count = len(content.split())            
             if len(retrieved_content) < max_contents:
                 retrieved_content.append(content)
                 successful_urls.append(url)
                 titles.append(title)
                 favicons.append(favicon_url)
-                word_count = len(content.split())
-                word_counts.append(word_count)
-                
+                if word_count > 1000:
+                    word_counts.append(word_count)
+                else:
+                    word_counts.append(1000)
             else:
                 # Already have enough content, break the loop
                 progress_bar0.empty()
                 break
-        time.sleep(0.5)  # Shorter delay since messages are removed immediately
+        time.sleep(0.5)
         if len(retrieved_content) >= max_contents:
             progress_bar0.empty()
             break
@@ -159,22 +209,24 @@ def perform_analysis(keyword):
         st.warning(f"Only retrieved {len(retrieved_content)} out of {max_contents} required contents.")
 
     if not retrieved_content:
-        st.error('Failed to retrieve content from the URLs.')
+        st.error('Failed to retrieve sufficient content from the URLs.')
         return
 
-    #calculating ideal word count
-    ideal_word_count = int(np.median(word_counts))
+    # Calculating ideal word count
+    if word_counts:
+        ideal_word_count = int(np.median(word_counts)) + 500
+    else:
+        ideal_word_count = 1000  # Default value if no word counts
     st.session_state['ideal_word_count'] = ideal_word_count  # Store in session state
 
     documents = retrieved_content
 
     # Lemmatize the documents
     documents_lemmatized = [lemmatize_text(doc) for doc in documents]
-    
+
     # Display the table of top search results
     st.subheader('Top Search Results')
 
-    # Create a header for the Markdown table
     # Populate the table with search results
     for idx in range(len(titles)):
         favicon_url = favicons[idx]
@@ -184,11 +236,11 @@ def perform_analysis(keyword):
 
         col1, col2 = st.columns([1, 9])
         with col1:
-            st.image(favicon_url, width=32)
+            st.markdown(idx+1)
         with col2:
             st.markdown(
                 f"""
-                <div style="background-color: white; padding: 10px; border-radius: 5px; margin-bottom: 10px; color: white;">
+                <div style="background-color: white; padding: 10px; border-radius: 5px; margin-bottom: 10px; color: black;">
                     <div style="display: flex; align-items: center;">
                         <img src="{favicon_url}" width="32" style="margin-right: 10px;">
                         <div>
@@ -200,12 +252,11 @@ def perform_analysis(keyword):
                 """,
                 unsafe_allow_html=True
             )
-                        
 
     if ideal_word_count:
         lower_bound = (ideal_word_count // 500) * 500
         upper_bound = lower_bound + 500
-                
+
         st.info(f"**Suggested Word Count:** Aim for approximately {lower_bound} to {upper_bound} words based on top-performing content.")
 
     # Continue with the analysis
@@ -238,32 +289,6 @@ def perform_analysis(keyword):
     # Multiply TF-IDF scores by 1000 for better visualization
     avg_tfidf_scores_scaled = avg_tfidf_scores * 1000
 
-    # Get top 50 terms by average TF-IDF score
-    sorted_indices = np.argsort(avg_tfidf_scores)[-50:][::-1]
-    highlighted_feature_names = [filtered_feature_names[i] for i in sorted_indices]
-    highlighted_avg_tfidf_scores = [avg_tfidf_scores_scaled[i] for i in sorted_indices]
-    highlighted_avg_tf_scores = [avg_tf_scores[i] for i in sorted_indices]
-
-    # Store the results in session state
-    st.session_state['chart_data'] = pd.DataFrame({
-        'Terms': highlighted_feature_names,
-        'Average TF Score': highlighted_avg_tf_scores,
-        'Average TF-IDF Score': highlighted_avg_tfidf_scores
-    })
-    st.session_state['words_to_check'] = [
-        {
-            'Term': highlighted_feature_names[i],
-            'Average TF Score': highlighted_avg_tf_scores[i],
-            'Average TF-IDF Score': highlighted_avg_tfidf_scores[i]
-        }
-        for i in range(len(highlighted_feature_names))
-    ]
-    st.session_state['analysis_completed'] = True
-
-    # Plot the stacked bar chart using st.bar_chart
-    st.subheader('Top 50 Words - Average TF and TF-IDF Scores')
-    chart_data = st.session_state['chart_data'].set_index('Terms')
-    st.bar_chart(chart_data, color=["#FFAA00", "#6495ED"])
 
     # --- Existing LDA Analysis (Adjusted with increased data) ---
     st.subheader('LDA Topic Modeling Results')
@@ -289,7 +314,7 @@ def perform_analysis(keyword):
     lda_feature_names = lda_vectorizer.get_feature_names_out()
     topics = {}
     for topic_idx, topic in enumerate(lda_model.components_):
-        top_indices = topic.argsort()[-15:][::-1]  # Get indices of top 10 terms
+        top_indices = topic.argsort()[-10:][::-1]  # Get indices of top 10 terms
         top_terms = [lda_feature_names[i] for i in top_indices]
         topics[f'Topic {topic_idx + 1}'] = top_terms
 
@@ -301,11 +326,14 @@ def perform_analysis(keyword):
     st.subheader('LDA Topics Term Distribution')
 
     # Prepare data for visualization
+    lda_top_terms = []    
     topic_term_data = []
     for topic_idx, topic in enumerate(lda_model.components_):
         top_indices = topic.argsort()[-10:][::-1]
         top_terms = [lda_feature_names[i] for i in top_indices]
         top_weights = topic[top_indices]
+        lda_top_terms.extend(top_terms)
+
         for term, weight in zip(top_terms, top_weights):
             topic_term_data.append({
                 'Topic': f'Topic {topic_idx + 1}',
@@ -329,60 +357,105 @@ def perform_analysis(keyword):
             height=300
         )
         st.altair_chart(chart)
+    # Combine LDA terms with TF-IDF terms
+    combined_terms_set = set(lda_top_terms + filtered_feature_names)
+    combined_terms = list(combined_terms_set)
 
-    # --- New Section: LSA Analysis ---
-    st.subheader('LSA Topic Modeling Results')
 
-    # Perform LSA using TruncatedSVD
-    num_topics_lsa = 5  # You can adjust this number
-    lsa = TruncatedSVD(n_components=num_topics_lsa, n_iter=100, random_state=42)
-    lsa_matrix = lsa.fit_transform(tfidf_matrix_filtered)
 
-    # Get the topics and their top terms
-    lsa_components = lsa.components_
-    lsa_feature_names = [filtered_feature_names[i] for i in range(len(filtered_feature_names))]
-    lsa_topics = {}
-    for topic_idx, topic in enumerate(lsa_components):
-        top_indices = topic.argsort()[-15:][::-1]
-        top_terms = [lsa_feature_names[i] for i in top_indices]
-        lsa_topics[f'Topic {topic_idx + 1}'] = top_terms
 
-    # Display the topics in a table
-    lsa_topics_df = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in lsa_topics.items()]))
-    st.table(lsa_topics_df)
+    # --- New Section: Combining TF-IDF and GloVe Embeddings ---
 
-    # Visualize the topics using a bar chart
-    st.subheader('LSA Topics Term Distribution')
+    # Load GloVe embeddings
+    embeddings_index = load_glove_embeddings('glove.6B.100d.txt')  # Ensure this file is available
 
-    # Prepare data for visualization
-    lsa_topic_term_data = []
-    for topic_idx, topic in enumerate(lsa_components):
-        top_indices = topic.argsort()[-10:][::-1]
-        top_terms = [lsa_feature_names[i] for i in top_indices]
-        top_weights = topic[top_indices]
-        for term, weight in zip(top_terms, top_weights):
-            lsa_topic_term_data.append({
-                'Topic': f'Topic {topic_idx + 1}',
-                'Term': term,
-                'Weight': weight
-            })
+    # Get embeddings for combined terms
+    term_embeddings = []
+    valid_terms = []
+    term_avg_tfidf_scores = []
+    term_avg_tf_scores = []
+    for term in combined_terms:
+        # Use the first word of the term for simplicity, or average embeddings for multi-word terms
+        words = term.split()
+        embeddings = []
+        for word in words:
+            if word in embeddings_index:
+                embeddings.append(embeddings_index[word])
+        if embeddings:
+            # Average embeddings for multi-word terms
+            term_embedding = np.mean(embeddings, axis=0)
+            term_embeddings.append(term_embedding)
+            valid_terms.append(term)
+            # Retrieve TF-IDF and TF scores if available
+            if term in filtered_feature_names:
+                idx = filtered_feature_names.index(term)
+                term_avg_tfidf_scores.append(avg_tfidf_scores_scaled[idx])
+                term_avg_tf_scores.append(avg_tf_scores[idx])
+            else:
+                # Assign default scores for terms from LDA only
+                term_avg_tfidf_scores.append(np.mean(avg_tfidf_scores_scaled) * 0.5)
+                term_avg_tf_scores.append(np.mean(avg_tf_scores) * 0.5)
+    if not term_embeddings:
+        st.warning('No embeddings found for the terms.')
+        return
 
-    lsa_topic_term_df = pd.DataFrame(lsa_topic_term_data)
+    term_embeddings = np.array(term_embeddings)
 
-    # Create a bar chart for each topic
-    for topic_idx in range(num_topics_lsa):
-        topic_label = f'Topic {topic_idx + 1}'
-        topic_data = lsa_topic_term_df[lsa_topic_term_df['Topic'] == topic_label]
-        chart = alt.Chart(topic_data).mark_bar().encode(
-            x=alt.X('Weight:Q', title='Term Weight'),
-            y=alt.Y('Term:N', sort='-x'),
-            tooltip=['Term', 'Weight']
-        ).properties(
-            title=topic_label,
-            width=600,
-            height=300
-        )
-        st.altair_chart(chart)
+    # Compute the embedding for the keyword
+    keyword_embedding = compute_embedding(keyword, embeddings_index)
+    if keyword_embedding is None:
+        st.warning('No embedding found for the keyword.')
+        return
+
+    # Compute cosine similarity between the keyword and each term
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    similarities = cosine_similarity([keyword_embedding], term_embeddings)[0]  # shape: (num_terms,)
+
+    # Combine TF-IDF scores and similarities
+    combined_scores = np.array(term_avg_tfidf_scores) * similarities  # Element-wise multiplication
+
+    # Get top N terms based on combined scores
+    N = 50
+    top_indices = np.argsort(combined_scores)[-N:][::-1]
+    top_terms = [valid_terms[i] for i in top_indices]
+    top_scores = [combined_scores[i] for i in top_indices]
+    top_avg_tfidf_scores = [term_avg_tfidf_scores[i] for i in top_indices]
+    top_similarities = [similarities[i] for i in top_indices]
+    top_avg_tf_scores = [term_avg_tf_scores[i] for i in top_indices]
+
+    # Store the results in session state
+    st.session_state['chart_data'] = pd.DataFrame({
+        'Terms': top_terms,
+        'Combined Score': top_scores,
+        'Average TF-IDF Score': top_avg_tfidf_scores,
+        'Similarity to Keyword': top_similarities
+    })
+    st.session_state['words_to_check'] = [
+        {
+            'Term': top_terms[i],
+            'Average TF Score': top_avg_tf_scores[i],
+            'Average TF-IDF Score': top_avg_tfidf_scores[i]
+        }
+        for i in range(len(top_terms))
+    ]
+    st.session_state['analysis_completed'] = True
+
+
+    # Plot the stacked bar chart using st.bar_chart
+    st.subheader('Top 50 Words - Average TF and TF-IDF Scores')
+    chart_data = st.session_state['chart_data'].set_index('Terms')
+    st.bar_chart(chart_data, color=["#FFAA00", "#6495ED","#FF5511"])
+
+    # Plot the bar chart
+    st.subheader('Top Relevant Words - Combined Scores')
+    chart_data = st.session_state['chart_data'].set_index('Terms')
+    st.bar_chart(chart_data['Combined Score'])
+
+
+    # Display the table of top terms with scores
+    st.table(st.session_state['chart_data'])
+
 
 def display_editor():
     # Add a button to start a new analysis
@@ -397,9 +470,9 @@ def display_editor():
     if ideal_word_count:
         lower_bound = (ideal_word_count // 500) * 500
         upper_bound = lower_bound + 500
-                
+
         st.info(f"**Suggested Word Count:** Aim for approximately {lower_bound} to {upper_bound} words based on top-performing content.")
-    
+
     # Update sidebar label
     st.sidebar.subheader('Optimize Your Content with These Words')
     words_to_check = st.session_state['words_to_check']
@@ -422,77 +495,167 @@ def display_editor():
     # Ensure text_input is a string
     if text_input is None:
         text_input = ""
+
+    # Remove HTML tags from the Quill editor output
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(text_input, 'html.parser')
+    text_input = soup.get_text()
+
+    # Lemmatize the user's input text
+    text_input_lemmatized = lemmatize_text(text_input)
+
+    # Calculate the word count dynamically
+    word_count = len(text_input.split()) if text_input.strip() else 0
+
+    # --- New Section: Import SEO Keywords ---
+    # Add a button to import CSV files
+    st.subheader('Import SEO Keywords')
+    uploaded_file = st.file_uploader('Upload a CSV file from your SEO keyword research tool:', type='csv')
+
+    # Initialize imported_keywords
+    imported_keywords = None
+
+    if uploaded_file is not None:
+        # Read the CSV file
+        df_seo = pd.read_csv(uploaded_file)
+
+        # Remove unnecessary columns
+        df_seo = df_seo[['Keyword', 'Avg. Search Volume (Last 6 months)', 'Keyword Difficulty']]
+
+        # Convert columns to numeric, handling errors
+        df_seo['Avg. Search Volume (Last 6 months)'] = pd.to_numeric(df_seo['Avg. Search Volume (Last 6 months)'], errors='coerce')
+        df_seo['Keyword Difficulty'] = pd.to_numeric(df_seo['Keyword Difficulty'], errors='coerce')
+
+        # Calculate a score to rank keywords (e.g., search volume divided by difficulty)
+        df_seo['Score'] = df_seo['Avg. Search Volume (Last 6 months)'] / (df_seo['Keyword Difficulty'] + 1e-6)
+
+        # Sort the keywords by the score in descending order
+        df_seo = df_seo.sort_values(by='Score', ascending=False)
+
+        # Keep only the top 5 keywords
+        df_seo = df_seo.head(5).reset_index(drop=True)
+
+        # Store the imported keywords in session state
+        st.session_state['imported_keywords'] = df_seo
+
+        imported_keywords = df_seo
     else:
-        # Remove HTML tags from the Quill editor output
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(text_input, 'html.parser')
-        text_input = soup.get_text()
-        # Calculate the word count dynamically
-        word_count = len(text_input.split()) if text_input.strip() else 0
+        # Retrieve from session state
+        imported_keywords = st.session_state.get('imported_keywords', None)
+
+    # Get words_to_check (TF-IDF terms)
+    words_to_check = st.session_state['words_to_check']
+
+    # Create a set of TF-IDF terms
+    tfidf_terms_set = set(word['Term'] for word in words_to_check)
+
+    # Prepare the list of imported keywords that are not duplicates
+    imported_words_to_check = []
+    if imported_keywords is not None and not imported_keywords.empty:
+        max_search_volume = imported_keywords['Avg. Search Volume (Last 6 months)'].max()
+        for idx, row in imported_keywords.iterrows():
+            term = row['Keyword']
+            if term in tfidf_terms_set:
+                # If duplicate, ignore the imported keyword and display it as a TF-IDF term
+                continue  # Skip adding this imported keyword
+            else:
+                # Add the imported keyword
+                search_volume = row['Avg. Search Volume (Last 6 months)']
+                difficulty = row['Keyword Difficulty']
+                # Normalize search volume for weighting
+                weight = 3  # Base weight for imported keywords
+                if pd.notna(search_volume) and max_search_volume > 0:
+                    weight += (search_volume / max_search_volume) * 2  # Scale weight between 3 and 5
+                else:
+                    weight += 1  # Default weight if search volume is not available
+                imported_words_to_check.append({
+                    'Term': term,
+                    'Average TF Score': 0,
+                    'Average TF-IDF Score': 0,
+                    'Weight': weight,
+                    'Search Volume': search_volume,
+                    'Keyword Difficulty': difficulty,
+                    'IsImported': True
+                })
+    else:
+        imported_keywords = pd.DataFrame()  # Empty DataFrame
+
+    # Now, combine the lists, with imported keywords at the top
+    combined_words_to_check = imported_words_to_check + words_to_check  # words_to_check already includes duplicates
 
     # Display the word count and optimization score
     if text_input.strip():
         # Calculate TF scores for the editor content
         total_words = word_count
-        tf_vectorizer = CountVectorizer(vocabulary=[word['Term'] for word in words_to_check], ngram_range=(1, 3))
-        text_tf_matrix = tf_vectorizer.fit_transform([text_input]).toarray()
-        editor_tf_scores = (text_tf_matrix[0] / total_words) * 1000  # Calculate TF and scale
+        tf_vectorizer = CountVectorizer(vocabulary=[word['Term'] for word in combined_words_to_check], ngram_range=(1, 3))
+        text_tf_matrix = tf_vectorizer.transform([text_input_lemmatized]).toarray()
+        editor_tf_scores = (text_tf_matrix[0] / total_words) * 1000 if total_words > 0 else np.zeros(len(combined_words_to_check))  # Calculate TF and scale
+
+        # Retrieve average TF scores from analysis
+        average_tf_scores = np.array([word.get('Average TF Score', 0) for word in combined_words_to_check])
+
+        # Assign Weights to Terms (already assigned during term preparation)
+        weights = np.array([word.get('Weight', 1) for word in combined_words_to_check])
 
         # Create DataFrame for comparison
         comparison_chart_data = pd.DataFrame({
-            'Terms': [word['Term'] for word in words_to_check],
-            'Average TF Score': [word['Average TF Score'] for word in words_to_check],
-            'Editor TF Score': editor_tf_scores
+            'Terms': [word['Term'] for word in combined_words_to_check],
+            'Average TF Score': [word.get('Average TF Score', 0) for word in combined_words_to_check],
+            'Editor TF Score': editor_tf_scores,
+            'IsImported': [word.get('IsImported', False) for word in combined_words_to_check],
+            'Weight': [word.get('Weight', 1) for word in combined_words_to_check]
         })
 
         # Calculate Occurrences
         occurrences_list = []
-        for term in words_to_check:
-            occurrences = len(re.findall(r'\b' + re.escape(term['Term']) + r'\b', text_input, flags=re.IGNORECASE))
+        for term in combined_words_to_check:
+            lemmatized_term = lemmatize_text(term['Term'])            
+            occurrences = len(re.findall(r'\b' + re.escape(lemmatized_term) + r'\b', text_input_lemmatized, flags=re.IGNORECASE))
             occurrences_list.append(occurrences)
-
         comparison_chart_data['Occurrences'] = occurrences_list
 
         # Calculate Target, Delta, Min and Max Occurrences
-        comparison_chart_data['Target'] = np.maximum(1, np.floor(comparison_chart_data['Average TF Score'] * word_count / 1000).astype(int))
-        comparison_chart_data['Delta'] = np.maximum(1, (0.1 * comparison_chart_data['Target']).astype(int))
+        targets = []
+        deltas = []
+        for idx, word in comparison_chart_data.iterrows():
+            if word['IsImported']:
+                # Calculate target occurrences based on word count
+                target = max(1, int(word_count / 500))
+                delta = max(1, int(0.1 * target))
+            else:
+                # Existing calculation for TF-IDF terms
+                target = np.maximum(1, int(np.floor(word['Average TF Score'] * word_count / 1000)))
+                delta = np.maximum(1, int(0.1 * target))
+            targets.append(target)
+            deltas.append(delta)
+        comparison_chart_data['Target'] = targets
+        comparison_chart_data['Delta'] = deltas
         comparison_chart_data['Min Occurrences'] = np.maximum(1, comparison_chart_data['Target'] - comparison_chart_data['Delta'])
         comparison_chart_data['Max Occurrences'] = comparison_chart_data['Target'] + comparison_chart_data['Delta']
 
-        # Assign Weights to Terms
-        num_terms = len(words_to_check)
-        weights = np.ones(num_terms)
-        weights[:5] = 6
-        weights[5:10] = 2
-        comparison_chart_data['Weight'] = weights
-
         # Compute Term Scores
         term_scores = []
-        for idx, row in comparison_chart_data.iterrows():
-            occurrences = row['Occurrences']
-            min_occurrences = row['Min Occurrences']
-            max_occurrences = row['Max Occurrences']
-            delta = row['Delta']
-
-            # Calculate deviation and term score
-            if occurrences < min_occurrences:
-                deviation = (min_occurrences - occurrences) / delta
-                deviation = min(1, deviation)
-                score = 1 - deviation
-            elif occurrences > max_occurrences:
-                deviation = (occurrences - max_occurrences) / delta
-                deviation = min(1, deviation)
-                score = 1 - deviation*2
+        for editor_tf_score, average_tf_score in zip(editor_tf_scores, average_tf_scores):
+            if average_tf_score > 0:
+                deviation = abs(editor_tf_score - average_tf_score) / average_tf_score
+                term_score = max(0, 1 - deviation)
             else:
-                score = 1  # Perfect match
-            term_scores.append(score)
+                # If the average TF score is zero
+                if editor_tf_score == 0:
+                    term_score = 1  # Perfect match (both are zero)
+                else:
+                    term_score = 0  # Editor uses the term, but it's not used in top content
+            term_scores.append(term_score)
 
-        comparison_chart_data['Term Score'] = term_scores
-        comparison_chart_data['Weighted Term Score'] = comparison_chart_data['Term Score'] * comparison_chart_data['Weight']
+        term_scores = np.array(term_scores)
+        weighted_term_scores = term_scores * weights
 
         # Compute Optimization Score
         max_weighted_sum = np.sum(weights)  # Maximum possible score
-        optimization_score = (comparison_chart_data['Weighted Term Score'].sum() / max_weighted_sum) * 100
+        optimization_score = (np.sum(weighted_term_scores) / max_weighted_sum) * 100 if max_weighted_sum > 0 else 0
+
+        # Ensure Optimization Score does not drop below 2%
+        optimization_score = max(optimization_score, 2)
 
         # Display word count and optimization score
         st.markdown(f"""
@@ -540,17 +703,24 @@ def display_editor():
                 max_occurrences = row['Max Occurrences']
                 target = row['Target']
 
-
                 # Determine color based on occurrences
                 if occurrences < min_occurrences:
-                    color = "#E3E3E3"  # Light Blue
+                    color = "#E3E3E3"  # Light Gray
                 elif occurrences > max_occurrences:
-                    color = "#EE2222"  # Dark Blue
+                    color = "#EE2222"  # Red
                 else:
-                    color = "#b0DD7c"  # Medium Blue
-                st.markdown(f"<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 0px; padding: 8px; background-color: {color}; color: black; border-radius: 5px;'>"
+                    color = "#b0DD7c"  # Green
+
+                # Check if the term is an imported keyword
+                if row['IsImported']:
+                    # Different styling for imported keywords
+                    background_style = 'background-color: #E6FFE6;'  # Light green
+                else:
+                    background_style = f'background-color: {color};'
+
+                st.markdown(f"<div style='display: flex; flex-direction: column; margin-bottom: 5px; padding: 8px; {background_style} color: black; border-radius: 5px;'>"
                             f"<span style='font-weight: bold;'>{word}</span>"
-                            f"<span>{occurrences} / ({min_occurrences}-{max_occurrences})</span>"
+                            f"<span>Occurrences: {occurrences} / Target: ({min_occurrences}-{max_occurrences})</span>"
                             f"</div>", unsafe_allow_html=True)
 
                 # Calculate progress toward minimum occurrences
@@ -562,6 +732,24 @@ def display_editor():
                 # Display the progress bar
                 st.progress(progress)
         st.markdown("</div>", unsafe_allow_html=True)
+
+    # Display imported keywords with their search volume and difficulty at the bottom
+    with st.sidebar:
+        if imported_keywords is not None and not imported_keywords.empty:
+            st.markdown("<div style='text-align: center; font-size: 20px; color: #2E8B57;'>Imported SEO Keywords</div>", unsafe_allow_html=True)
+            for idx, row in imported_keywords.iterrows():
+                keyword = row['Keyword']
+                search_volume = row['Avg. Search Volume (Last 6 months)']
+                difficulty = row['Keyword Difficulty']
+                occurrences = text_input.lower().count(keyword.lower())
+                st.markdown(f"<div style='padding: 8px; background-color: #E6FFE6; color: black; border-radius: 5px; margin-bottom: 5px;'>"
+                            f"<strong>{keyword}</strong><br>"
+                            f"Occurrences: {occurrences}<br>"
+                            f"Avg. Search Volume (6 months): {search_volume}<br>"
+                            f"Keyword Difficulty: {difficulty}"
+                            f"</div>", unsafe_allow_html=True)
+
+
 
 
 def main():

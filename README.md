@@ -1,8 +1,6 @@
-# 🎈 Blank app template
+# 🥣🔤 Needs More Words - Optimize Your Content
 
-A simple Streamlit app template for you to modify!
-
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://blank-app-template.streamlit.app/)
+Let's you know what topics and words you need to include in your content and suggests how long it should be, based on top 20 results from Google.
 
 ### How to run it on your own machine
 

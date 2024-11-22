@@ -173,7 +173,7 @@ def perform_analysis(keyword):
     retrieved_content = []
     successful_urls = []
     word_counts = []
-    max_contents = 15
+    max_contents = 5
 
     for idx, url in enumerate(top_urls):
         # Remove status messages after a short delay

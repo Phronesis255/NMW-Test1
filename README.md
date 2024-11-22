@@ -15,3 +15,6 @@ Let's you know what topics and words you need to include in your content and sug
    ```
    $ streamlit run streamlit_app.py
    ```
+3. Run with Docker:
+
+https://docs.streamlit.io/deploy/tutorials/docker

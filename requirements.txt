@@ -16,7 +16,6 @@ nltk
 sentence-transformers
 transformers
 people_also_ask
-base64
 typing
 
 

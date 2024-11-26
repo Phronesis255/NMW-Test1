@@ -10,7 +10,13 @@ scikit-learn
 matplotlib
 urllib3
 altair
-streamlit_quill
+streamlit-quill
 google-search-results
+nltk
+sentence-transformers
+transformers
+people_also_ask
+typing
+
 
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.5.0/en_core_web_sm-3.5.0-py3-none-any.whl

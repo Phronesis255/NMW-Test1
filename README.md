@@ -1,5 +1,7 @@
 # 🥣🔤 Needs More Words - Optimize Your Content
 
+Updated to final version 0.3
+
 Let's you know what topics and words you need to include in your content and suggests how long it should be, based on top 20 results from Google.
 
 ### How to run it on your own machine

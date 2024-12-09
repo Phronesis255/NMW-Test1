@@ -23,8 +23,9 @@ COPY requirements.txt /app/
 
 # Install a specific version of numpy before other dependencies
 # This resolves issues related to deprecated API in gensim
-RUN pip install --upgrade pip \
-    && pip install numpy==1.22.0
+RUN apt-get update && apt-get install -y python3-distutils
+RUN pip install --upgrade pip setuptools wheel
+RUN pip install numpy==1.22.0
 
 # Install Python dependencies
 RUN pip install -r requirements.txt

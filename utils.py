@@ -11,6 +11,7 @@ import numpy as np
 import spacy
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
+from sklearn.metrics.pairwise import cosine_similarity
 
 import streamlit as st
 from streamlit_quill import st_quill
@@ -55,6 +56,15 @@ def load_spacy_model():
 
 nlp = load_spacy_model()
 
+def get_sentence_embedding(sentence, embeddings_index):
+    words = sentence.lower().split()
+    embeddings = [embeddings_index[word] for word in words if word in embeddings_index]
+    if embeddings:
+        sentence_embedding = np.mean(embeddings, axis=0)
+    else:
+        sentence_embedding = np.zeros(100)  # Assuming 100-dimensional embeddings
+    return sentence_embedding
+
 # Define all your shared functions here
 def lemmatize_text(text):
     # Your lemmatization code
@@ -95,7 +105,6 @@ def remove_duplicate_questions(questions, similarity_threshold=0.75):
     embeddings = model.encode(preprocessed_questions)
 
     # Compute cosine similarity matrix
-    from sklearn.metrics.pairwise import cosine_similarity
     similarity_matrix = cosine_similarity(embeddings)
 
     # Cluster questions
@@ -228,6 +237,58 @@ def compute_embedding(text, embeddings_index):
     else:
         return None
 
+import difflib
+from urllib.parse import urlparse
+import spacy
+
+nlp = spacy.load("en_core_web_sm")
+
+def extract_brand_name(url, title):
+    # Extract the domain name
+    parsed_url = urlparse(url)
+    domain_parts = parsed_url.netloc.split('.')
+    
+    # Remove common prefixes (e.g., 'www')
+    if domain_parts[0] == 'www':
+        domain_parts.pop(0)
+
+    # Take the root domain (e.g., 'lawruler' from 'lawruler.com')
+    domain_root = domain_parts[0].capitalize()
+
+    # Attempt to extract the brand name from the title
+    if title:
+        # Split title into parts (e.g., "Client Intake Software - Law Ruler")
+        title_parts = title.split(' - ')
+        for part in reversed(title_parts):  # Start from the end
+            ratio = difflib.SequenceMatcher(None, domain_root.lower(), part.lower()).ratio()
+            if ratio > 0.8:  # Threshold for fuzzy matching
+                return part.strip()  # Return the part containing the domain root
+
+    # Fallback to the root domain as the brand name
+    return domain_root
+
+def is_brand_mentioned(term, brand_name):
+    # Case-insensitive check
+    if brand_name.lower() in term.lower():
+        return True
+
+    # Optionally use difflib for partial matches
+    ratio = difflib.SequenceMatcher(None, term.lower().replace(' ', ''), brand_name.lower().replace(' ', '')).ratio()
+    # Consider it a match if similarity is high enough (adjust threshold as needed)
+    if ratio > 0.8:
+        return True
+
+    # Check NER: if a named entity matches or closely resembles the brand
+    doc = nlp(term)
+    for ent in doc.ents:
+        if ent.label_ in ['ORG', 'PRODUCT', 'PERSON', 'GPE']:
+            # Compare entity text with brand_name using a ratio
+            ratio_ent = difflib.SequenceMatcher(None, ent.text.lower().replace(' ', ''), brand_name.lower().replace(' ', '')).ratio()
+            if ratio_ent > 0.8:
+                return True
+
+    return False
+
 
 @st.cache_resource
 def load_glove_embeddings(glove_file_path):
@@ -263,7 +324,28 @@ def filter_terms(terms):
     return filtered_terms
 
 
+def is_not_branded(question):
+    """
+    Checks if a given question string is branded.
+
+    Args:
+        question (str): The question string to check.
+
+    Returns:
+        bool: True if the question is not branded, False otherwise.
+    """
+    # Retrieve brand names from session state
+    brands = st.session_state.get('brands', [])
+    
+    # Check if the question mentions any brand name
+    for brand in brands:
+        if is_brand_mentioned(question, brand):
+            return False  # The question is branded
+    return True  # The question is not branded
+
+
 def perform_analysis(keyword):
+    start_time = time.time()
     st.info('Retrieving top search results...')
     progress_bar0 = st.progress(0)
     top_urls = get_top_unique_domain_results(keyword, num_results=100, max_domains=100)
@@ -278,8 +360,10 @@ def perform_analysis(keyword):
     retrieved_content = []
     successful_urls = []
     word_counts = []
-    max_contents = 8
+    max_contents = 12
     headings_data = []
+    brand_names = set()  # To store unique brand names
+    
     for idx, url in enumerate(top_urls):
         # Remove status messages after a short delay
         status_message = st.empty()
@@ -288,11 +372,26 @@ def perform_analysis(keyword):
         title, content, favicon_url, headings = extract_content_from_url(url, extract_headings=True)
         time.sleep(1)
         status_message.empty()  # Remove the status message
-        if headings:
-            headings_data.extend(headings)
-
         if title is None:
             title = "No Title"
+
+        brand_name = extract_brand_name(url, title)
+        brand_names.add(brand_name)
+
+
+        if headings and isinstance(headings, list):  # Ensure headings is a list
+            for heading in headings:
+                if isinstance(heading, dict) and 'text' in heading:  # Ensure heading is a dictionary with 'text'
+                    # Append title along with heading text and URL
+                    headings_data.append({
+                        'text': heading['text'].strip(),
+                        'url': url,
+                        'title': title
+                    })
+                else:
+                    st.warning(f"Unexpected heading format: {heading}")
+
+
         if content:
             word_count = len(content.split())            
             if len(retrieved_content) < max_contents:
@@ -320,6 +419,9 @@ def perform_analysis(keyword):
         st.error('Failed to retrieve sufficient content from the URLs.')
         return
 
+    # Save unique brand names to session state
+    st.session_state['brands'] = list(brand_names)
+
     # Calculating ideal word count
     if word_counts:
         ideal_word_count = int(np.median(word_counts)) + 500
@@ -333,46 +435,40 @@ def perform_analysis(keyword):
     documents_lemmatized = [lemmatize_text(doc) for doc in documents]
     
     
-    if headings_data is not None:
+    if headings_data:
         st.subheader("All Headings in the Content")
         # Create a DataFrame for headings
         question_words = ['how', 'why', 'what', 'who', 'which', 'is', 'are', 'can', 'does', 'will']
-        # Filter headings that are questions
         filtered_headings_data = [
-            heading['text'].strip() for heading in headings_data
-            if (heading['text'].strip().endswith('?') or
+            heading for heading in headings_data
+            if (heading['text'].endswith('?') or
                 (heading['text'].split() and heading['text'].split()[0].lower() in question_words))
         ]
 
-        # Remove duplicates
-        filtered_headings_data = list(set(filtered_headings_data))
+        # Remove duplicates based on both text and URL
+        filtered_headings_data = list({(heading['text'], heading['url'], heading.get('title', 'No Title')) for heading in filtered_headings_data})
 
-        # Combine with existing PAA questions if available
-        existing_paa_list = st.session_state.get('paa_list', [])
-        combined_questions = existing_paa_list + filtered_headings_data
+        # Convert to DataFrame
+        paa_list_df = pd.DataFrame(filtered_headings_data, columns=['Question', 'URL', 'Title'])
 
-        # Remove duplicates and similar questions
-        cleaned_questions = remove_duplicate_questions(combined_questions)
-
-        # Update paa_list in session state
-        st.session_state['paa_list'] = cleaned_questions
+        # Update session state
+        st.session_state['paa_list'] = paa_list_df
         
         # Ensure "Keep" key is added to paa_list
-        if 'paa_list' in st.session_state:
-            paa_list = st.session_state['paa_list']
-            if isinstance(paa_list, list) and all(isinstance(item, str) for item in paa_list):
-                st.session_state['paa_list'] = [{"Question": q, "Keep": True} for q in paa_list]
-            elif isinstance(paa_list, list) and all(isinstance(item, dict) for item in paa_list):
-                paa_df = pd.DataFrame(paa_list)
-                if 'Keep' not in paa_df.columns:
-                    paa_df['Keep'] = True
-                paa_list = paa_df.to_dict(orient='records')
-                st.session_state['paa_list'] = paa_df
+        # if 'paa_list' in st.session_state:
+        #     paa_list = st.session_state['paa_list']
+        #     if isinstance(paa_list, list) and all(isinstance(item, str) for item in paa_list):
+        #         st.session_state['paa_list'] = [{"Question": q, "Keep": True} for q in paa_list]
+        #     elif isinstance(paa_list, list) and all(isinstance(item, dict) for item in paa_list):
+        #         paa_df = pd.DataFrame(paa_list)
+        #         if 'Keep' not in paa_df.columns:
+        #             paa_df['Keep'] = True
+        #         paa_list = paa_df.to_dict(orient='records')
+        #         st.session_state['paa_list'] = paa_df
 
         # Display the cleaned-up questions
-        st.write("Total Questions Extracted and Cleaned:", len(cleaned_questions))
-        for question in cleaned_questions:
-            st.write(f"- {question}")
+        st.write("Total Questions Extracted and Cleaned:", len(paa_list_df))
+        # st.table(paa_list_df)
 
         # Create a DataFrame for headings
         headings_df = pd.DataFrame(filtered_headings_data)
@@ -451,7 +547,7 @@ def perform_analysis(keyword):
     st.subheader('LDA Topic Modeling Results')
 
     # Create a CountVectorizer for LDA (with the same preprocessing)
-    lda_vectorizer = CountVectorizer(ngram_range=(2, 3), vocabulary=filtered_feature_names)
+    lda_vectorizer = CountVectorizer(ngram_range=(2, 4), vocabulary=filtered_feature_names)
     lda_matrix = lda_vectorizer.fit_transform(documents_lemmatized)
 
     # Set the number of topics
@@ -483,8 +579,11 @@ def perform_analysis(keyword):
     st.table(topics_df)
 
     lda_top_terms = list(set(lda_top_terms))
+    non_branded_lda_terms = [term for term in lda_top_terms if is_not_branded(term)]  # Apply is_not_branded
+    lda_top_terms = non_branded_lda_terms
     if len(lda_top_terms) > 50:
         lda_top_terms = lda_top_terms[:50]
+    
     st.session_state['lda_top_terms'] = lda_top_terms
     # Combine LDA terms with TF-IDF terms
     combined_terms_set = set(lda_top_terms + filtered_feature_names)
@@ -537,7 +636,6 @@ def perform_analysis(keyword):
         return
 
     # Compute cosine similarity between the keyword and each term
-    from sklearn.metrics.pairwise import cosine_similarity
 
     similarities = cosine_similarity([keyword_embedding], term_embeddings)[0]  # shape: (num_terms,)
 
@@ -550,7 +648,7 @@ def perform_analysis(keyword):
     top_terms = [valid_terms[i] for i in top_indices]
     top_scores = [combined_scores[i] for i in top_indices]
     top_avg_tfidf_scores = [term_avg_tfidf_scores[i] for i in top_indices]
-    top_similarities = [similarities[i] for i in top_indices]
+    top_similarities = [similarities[i]*100 for i in top_indices]
     top_avg_tf_scores = [term_avg_tf_scores[i] for i in top_indices]
 
     # Store the results in session state
@@ -568,13 +666,13 @@ def perform_analysis(keyword):
         }
         for i in range(len(top_terms))
     ]
+    elapsed_time = time.time() - start_time
+    print(f"Time taken to reach Content Editor: {elapsed_time:.2f} seconds")        
+
     st.session_state['analysis_completed'] = True
 
 
     # Plot the stacked bar chart using st.bar_chart
-    st.subheader('Top 50 Words - Average TF and TF-IDF Scores')
-    chart_data = st.session_state['chart_data'].set_index('Terms')
-    st.bar_chart(chart_data, color=["#FFAA00", "#6495ED","#FF5511"])
     # # Plot the bar chart
     # st.subheader('Top Relevant Words - Combined Scores')
     # chart_data = st.session_state['chart_data'].set_index('Terms')
@@ -797,7 +895,7 @@ def display_editor():
             weighted_term_scores = term_scores * weights
             max_weighted_sum = np.sum(weights)
             optimization_score = (np.sum(weighted_term_scores) / max_weighted_sum) * 100 if max_weighted_sum > 0 else 0
-            optimization_score = max(optimization_score, 19) + 15
+            optimization_score = max(optimization_score, 19) + 10
             optimization_score = min(optimization_score, 94)
             return optimization_score
 
@@ -819,36 +917,57 @@ def display_editor():
         st.session_state['comparison_chart_data'] = comparison_chart_data.copy()
 
         original_keyword = st.session_state.get('keyword', '')
+        embeddings_index = load_glove_embeddings('glove.6B.100d.txt')
+        original_keyword_embedding = get_sentence_embedding(original_keyword, embeddings_index)
+        similarities = []
+
         
         if 'paa_list' in st.session_state:
-            st.table(st.session_state['paa_list'])
-            if isinstance(st.session_state['paa_list'],list):
-                paa_list = pd.DataFrame(st.session_state['paa_list'], columns=['Question'])
-                st.session_state['paa_list'] = paa_list
+            # st.table(st.session_state['paa_list'])
             paa_list = st.session_state['paa_list']
-        # # --- PAA Questions Handling ---
-        # if 'paa_list' not in st.session_state:
-        #     if original_keyword:
-        #         paa_list = paa.get_related_questions(original_keyword, 5)
-        #         st.session_state['paa_list'] = paa_list
-        #     else:
-        #         st.session_state['paa_list'] = []
-        # else:
-        #     paa_list = st.session_state['paa_list']
+            if isinstance(paa_list, pd.DataFrame):
+                # Filter branded questions
+
+                # Apply the branded filter
+                non_branded_paa_list = paa_list[paa_list['Question'].apply(is_not_branded)]
+
+                # Calculate similarities for non-branded questions
+                for index, row in non_branded_paa_list.iterrows():
+                    question = row['Question']
+                    question_embedding = get_sentence_embedding(question, embeddings_index)
+                    sim = cosine_similarity(
+                        original_keyword_embedding.reshape(1, -1),
+                        question_embedding.reshape(1, -1)
+                    )[0][0]
+                    similarities.append(sim)
+
+                # Add similarities to the DataFrame
+                non_branded_paa_list['Similarity'] = similarities
+                
+
+                # Set a similarity threshold
+                similarity_threshold = 0.87  # Adjust based on your requirements
+
+                # Filter questions based on similarity threshold
+                filtered_paa_list = non_branded_paa_list[non_branded_paa_list['Similarity'] >= similarity_threshold]
+                filtered_paa_list['Similarity'] = (filtered_paa_list['Similarity'] * 100).round().astype(int)
 
 
-        # paa_list = []
-        # if original_keyword:
-        #     existing_paa_list = st.session_state.get('paa_list', [])
-        #     paa_list = paa.get_related_questions(original_keyword,5) + existing_paa_list
-        #     st.write(paa_list)
-        #     st.session_state['paa_list'] = paa_list
-        # else:
-        #     paa_list = existing_paa_list
-        #     st.session_state['paa_list'] = paa_list
+                columns_to_display = ['Question', 'Similarity']
+                filtered_paa_list_to_display = filtered_paa_list[columns_to_display]
+
+                # Display the filtered DataFrame without the index
+                st.table(filtered_paa_list_to_display.reset_index(drop=True))
+            else:
+                st.error("paa_list is not structured as a DataFrame. Please check its format.")
             
 
         st.session_state['comparison_chart_data'] = comparison_chart_data
+        if 'chart_data' in st.session_state:
+            st.subheader('Top 50 Words - Average TF and TF-IDF Scores')
+            chart_data = st.session_state['chart_data'].set_index('Terms')
+            st.bar_chart(chart_data, color=["#FFAA00", "#6495ED","#FF5511"])
+
 
         # **Visualization: Bar and Line Chart**
         st.subheader('Comparison of Average TF and Your Content TF Scores')
@@ -874,7 +993,7 @@ def display_editor():
 
     # Display words to check in the sidebar
     with st.sidebar:
-        tab1, tab2, tab3, tab4 = st.tabs(["Word Frequency", "Edit Terms", "LDA Terms", "Questions"])
+        tab1, tab2, tab3 = st.tabs(["Word Frequency", "Edit Terms", "LDA Terms"])
         with tab1:
             # Update sidebar label
             st.markdown("<div style='text-align: center; font-size: 24px; color: #ffaa00;'>Word Frequency</div>", unsafe_allow_html=True)
@@ -971,41 +1090,41 @@ def display_editor():
             st.markdown("</div>", unsafe_allow_html=True)
             
                 # Tab 4: PAA Questions
-        with tab4:
-            st.markdown("<div style='text-align: center; font-size: 24px; color: #555555;'>Edit PAA Questions</div>", unsafe_allow_html=True)
+        # with tab4:
+        #     st.markdown("<div style='text-align: center; font-size: 24px; color: #555555;'>Edit PAA Questions</div>", unsafe_allow_html=True)
 
-            if 'paa_list' not in st.session_state:
-                st.session_state['paa_list'] = [
-                    {"Question": "What is the best way to improve SEO?", "Keep": True},
-                    {"Question": "How to optimize content for search engines?", "Keep": True},
-                    {"Question": "What are long-tail keywords?", "Keep": True},
-                ]
-            paa_list = st.session_state['paa_list']
+        #     if 'paa_list' not in st.session_state:
+        #         st.session_state['paa_list'] = [
+        #             {"Question": "What is the best way to improve SEO?", "Keep": True},
+        #             {"Question": "How to optimize content for search engines?", "Keep": True},
+        #             {"Question": "What are long-tail keywords?", "Keep": True},
+        #         ]
+        #     paa_list = st.session_state['paa_list']
 
-            if 'Keep' not in paa_list.columns:
-                paa_list['Keep'] = True
-            edited_paa_df = pd.DataFrame()
+        #     if 'Keep' not in paa_list.columns:
+        #         paa_list['Keep'] = True
+        #     edited_paa_df = pd.DataFrame()
 
-            def update():
-                for idx, change in st.session_state.terms["edited_rows"].items():
-                    for label, value in change.items():
-                        # st.write(f"{idx}  {label}  {value}")
-                        st.session_state['paa_list'].loc[idx, label] = value
-                        #st.table(comparison_chart_data)
+        #     def update():
+        #         for idx, change in st.session_state.terms["edited_rows"].items():
+        #             for label, value in change.items():
+        #                 # st.write(f"{idx}  {label}  {value}")
+        #                 st.session_state['paa_list'].loc[idx, label] = value
+        #                 #st.table(comparison_chart_data)
 
-            editable_columns_q = ['Keep', 'Question']
-            edited_paa_df = st.data_editor(
-                paa_list[editable_columns_q],
-                column_config={
-                    "Keep": st.column_config.CheckboxColumn(required=True),
-                },
-                use_container_width=True,
-                key='Question',
-                hide_index=True,
-                on_change=update
-            )
+        #     editable_columns_q = ['Keep', 'Question']
+        #     edited_paa_df = st.data_editor(
+        #         paa_list[editable_columns_q],
+        #         column_config={
+        #             "Keep": st.column_config.CheckboxColumn(required=True),
+        #         },
+        #         use_container_width=True,
+        #         key='Question',
+        #         hide_index=True,
+        #         on_change=update
+        #     )
             
-            paa_list.update(edited_paa_df)
+        #     paa_list.update(edited_paa_df)
             # Update `paa_df` in session state
             #st.session_state['paa_list'] = edited_paa_df.copy()
 

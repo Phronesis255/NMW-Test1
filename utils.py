@@ -4,6 +4,7 @@ import math
 import time
 from urllib.parse import urlparse, urljoin
 
+
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd

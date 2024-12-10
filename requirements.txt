@@ -18,7 +18,6 @@ transformers
 people_also_ask
 typing
 torch
-string
 sentence_transformers
 
 

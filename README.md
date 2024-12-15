@@ -33,3 +33,4 @@ https://docs.streamlit.io/deploy/tutorials/docker
    # Remove the zip file
    rm glove.6B.zip
    ```
+   We only need "glove.6B.100d.txt" so you can also remove the other embedding files in the zip.

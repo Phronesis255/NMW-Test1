@@ -763,17 +763,17 @@ def main():
         else:
             st.error('Please enter a keyword.')
 
-elif st.session_state['step'] == 'editor':
-    if not st.session_state['analysis_completed']:
-        st.warning("Please perform the analysis first.")
+    elif st.session_state['step'] == 'editor':
+        if not st.session_state['analysis_completed']:
+            st.warning("Please perform the analysis first.")
+            st.session_state['step'] = 'analysis'
+            st.rerun()
+        else:
+            st.header('✍️ Content Editor')
+            display_editor()
+
+
+    else:
+        # Default to analysis step if step is undefined
         st.session_state['step'] = 'analysis'
         st.rerun()
-    else:
-        st.header('✍️ Content Editor')
-        display_editor()
-
-
-else:
-    # Default to analysis step if step is undefined
-    st.session_state['step'] = 'analysis'
-    st.rerun()

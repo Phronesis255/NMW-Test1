@@ -4,7 +4,6 @@ import math
 import time
 from urllib.parse import urlparse, urljoin
 
-
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -21,7 +20,7 @@ import altair as alt
 
 import people_also_ask as paa
 from transformers import pipeline
-from transformers.pipelines import QuestionAnsweringPipeline
+# from transformers.pipelines import QuestionAnsweringPipeline
 from typing import List, Dict
 import base64
 
@@ -31,6 +30,15 @@ import nltk
 import string
 import ssl
 import torch
+
+from serpapi import GoogleSearch
+from sklearn.decomposition import TruncatedSVD
+from scipy.sparse import hstack
+
+import os
+from google.ads.googleads.client import GoogleAdsClient
+from google.oauth2 import service_account
+
 
 # Initialize NLTK data
 try:
@@ -56,6 +64,84 @@ def load_spacy_model():
         return spacy.load('en_core_web_sm')
 
 nlp = load_spacy_model()
+
+def pull_google_keyword_data(keyword):
+    # Replace with the path to your service account JSON key file
+    key_file_path = "nmw-t-1-e01bb49718d1.json"  # Adjust as necessary
+    developer_token = "p2Of8yLD6yKNWn7NrtlR3g"    # Replace with your actual developer token
+    login_customer_id = "8882181823"             # Replace with your actual login customer ID
+
+    # Location and Language (example values)
+    location_ids = ["1023191"]  # Example: New York, NY
+    language_id = "1000"        # English
+
+    try:
+        credentials = service_account.Credentials.from_service_account_file(key_file_path)
+        config = {
+            "developer_token": developer_token,
+            "use_proto_plus": True,
+            "json_key_file_path": key_file_path,
+        }
+        if login_customer_id:
+            config["login_customer_id"] = login_customer_id
+
+        # Initialize the Google Ads client
+        client = GoogleAdsClient.load_from_dict(config_dict=config)
+        print("Client successfully initialized")
+
+        keyword_plan_idea_service = client.get_service("KeywordPlanIdeaService")
+        google_ads_service = client.get_service("GoogleAdsService")
+        geo_target_constant_service = client.get_service("GeoTargetConstantService")
+
+        def map_locations_ids_to_resource_names(location_ids):
+            return [
+                geo_target_constant_service.geo_target_constant_path(location_id)
+                for location_id in location_ids
+            ]
+
+        location_rns = map_locations_ids_to_resource_names(location_ids)
+        language_rn = google_ads_service.language_constant_path(language_id)
+
+        request = client.get_type("GenerateKeywordIdeasRequest")
+        request.customer_id = login_customer_id
+        request.language = language_rn
+        request.geo_target_constants.extend(location_rns)
+        request.include_adult_keywords = False
+        request.keyword_plan_network = client.enums.KeywordPlanNetworkEnum.GOOGLE_SEARCH_AND_PARTNERS
+        request.keyword_seed.keywords.append(keyword)
+
+        keyword_ideas = keyword_plan_idea_service.generate_keyword_ideas(request=request)
+        keyword_data = []
+
+        for idea in keyword_ideas:
+            competition_value = idea.keyword_idea_metrics.competition.name if idea.keyword_idea_metrics.competition else "UNKNOWN"
+            avg_monthly_searches = idea.keyword_idea_metrics.avg_monthly_searches or 0
+            keyword_data.append({
+                "Keyword Text": idea.text,
+                "Average Monthly Searches": avg_monthly_searches,
+                "Competition": competition_value
+            })
+
+        df = pd.DataFrame(keyword_data)
+        if df.empty:
+            st.warning("No keyword data returned from Google Keyword Planner.")
+            return None, None
+
+        # Add a word count column
+        df['word_count'] = df['Keyword Text'].apply(lambda x: len(x.split()))
+
+        # Create the scatter plot
+        chart = alt.Chart(df).mark_point().encode(
+            x='word_count',
+            y='Average Monthly Searches',
+            tooltip=['Keyword Text', 'Average Monthly Searches', 'word_count']
+        ).properties(title="Word Count vs. Average Monthly Searches")
+
+        return df, chart
+
+    except Exception as e:
+        st.error(f"An error occurred while pulling Google Keyword Data: {e}")
+        return None, None
 
 def get_sentence_embedding(sentence, embeddings_index):
     words = sentence.lower().split()
@@ -84,6 +170,127 @@ def lemmatize_text(text):
     return ' '.join(lemmatized_tokens)
 
 
+def extract_keywords_embedrank(text, candidates):
+    # Ensure embed_model is loaded
+    embed_model = load_embedding_model()
+    document_embedding = embed_model.encode(text, convert_to_tensor=True)
+    candidate_embeddings = embed_model.encode(candidates, convert_to_tensor=True)
+    similarities = util.cos_sim(candidate_embeddings, document_embedding).squeeze()
+    ranked_candidates = sorted(zip(candidates, similarities), key=lambda x: x[1], reverse=True)
+
+    embedrank_scores = {candidate: float(score) for candidate, score in ranked_candidates}
+    return embedrank_scores
+
+def filter_keywords_by_scores(top_keywords, embedrank_scores, tfidf_matrix, terms):
+    filtered_data = []
+    tfidf_array = tfidf_matrix.toarray()
+    for topic, keywords in top_keywords:
+        for keyword in keywords:
+            relevance = embedrank_scores.get(keyword, 0)
+            try:
+                keyword_index = list(terms).index(keyword)
+                tfidf_score = tfidf_array[:, keyword_index].mean()  # Average TF-IDF across documents
+            except ValueError:
+                tfidf_score = 0
+
+            # Adjust thresholds as needed
+            if tfidf_score >= 0.012 and relevance >= 0.2:
+                filtered_data.append({
+                    "Terms": keyword,
+                    "Relevance": relevance,
+                    "TF-IDF": tfidf_score,
+                    "Topic": topic
+                })
+
+    return pd.DataFrame(filtered_data)
+
+def perform_lsa(documents, n_topics=5):
+    vectorizer = TfidfVectorizer(stop_words='english', max_features=5000, ngram_range=(2,4))
+    tfidf_matrix = vectorizer.fit_transform(documents)
+    terms = vectorizer.get_feature_names_out()
+
+    vectorizer2 = TfidfVectorizer(stop_words='english', max_features=5000, ngram_range=(2,3))
+    tfidf_matrix2 = vectorizer2.fit_transform(documents)
+    terms2 = vectorizer2.get_feature_names_out()
+
+    # Combine both TF-IDF matrices and terms
+    tfidf_matrix = hstack([tfidf_matrix, tfidf_matrix2])
+    terms = np.concatenate([terms, terms2])
+
+    lsa = TruncatedSVD(n_components=n_topics, random_state=42)
+    lsa_matrix = lsa.fit_transform(tfidf_matrix)
+
+    top_keywords = []
+    for i, component in enumerate(lsa.components_):
+        keywords = [terms[idx] for idx in component.argsort()[-100:]][::-1]
+        top_keywords.append((i + 1, keywords))
+
+    return lsa_matrix, top_keywords, lsa, tfidf_matrix, terms
+
+def deep_dive(keyword):
+    # Retrieve documents and documents_lemmatized from session_state
+    documents = st.session_state.get('documents', [])
+    documents_lemmatized = st.session_state.get('documents_lemmatized', [])
+
+    if not documents or not documents_lemmatized:
+        st.error("No documents available. Please run analysis first.")
+        return
+
+    feature_names = []
+    filtered_feature_names = []
+    tfidf_matrix_raw = []
+    tf_matrix_raw = []
+    try:
+        tfidf_vectorizer = TfidfVectorizer(ngram_range=(1, 3))
+        tf_vectorizer = CountVectorizer(ngram_range=(1, 3))
+
+        tfidf_matrix_raw = tfidf_vectorizer.fit_transform(documents_lemmatized).toarray()
+        tf_matrix_raw = tf_vectorizer.fit_transform(documents_lemmatized).toarray()
+
+        feature_names = tfidf_vectorizer.get_feature_names_out()
+        filtered_feature_names_list = filter_terms(feature_names)
+
+        filtered_indices = [i for i, term in enumerate(feature_names) if term in filtered_feature_names_list]
+        tfidf_matrix_filtered = tfidf_matrix_raw[:, filtered_indices]
+        tf_matrix_filtered = tf_matrix_raw[:, filtered_indices]
+
+        filtered_feature_names = [feature_names[i] for i in filtered_indices]
+
+        avg_tfidf_scores = np.mean(tfidf_matrix_filtered, axis=0)
+        avg_tf_scores = np.mean(tf_matrix_filtered, axis=0)
+        avg_tfidf_scores_scaled = avg_tfidf_scores * 1000
+
+        # Perform LSA
+        lsa_matrix, top_keywords, lsa, tfidf_matrix, terms = perform_lsa(documents, n_topics=3)
+
+        # Filter out branded terms
+        brands = st.session_state.get('brands', [])
+        filtered_keywords = []
+        embedrank_scores = {}
+        all_text = ' '.join(documents)  # context for EmbedRank
+
+        for topic, keywords in top_keywords:
+            non_branded = [k for k in keywords if is_not_branded(k)]
+            filtered_keywords.append((topic, non_branded))
+
+            # Get EmbedRank scores for filtered keywords
+            topic_scores = extract_keywords_embedrank(all_text, non_branded)
+            embedrank_scores.update(topic_scores)
+
+        # Filter by TF-IDF and relevance
+        filtered_df = filter_keywords_by_scores(filtered_keywords, embedrank_scores, tfidf_matrix, terms)
+
+        # Store filtered_df in session state as chart_data
+        st.session_state['deep_dive_data'] = filtered_df
+
+        top_n = min(50, len(filtered_df))
+        filtered_df = filtered_df.iloc[:top_n]
+
+        # Display results
+        st.subheader("Deep Dive Keywords")
+        st.dataframe(filtered_df)
+    except Exception as e:
+        st.error(f"Error during deep dive: {e}")
 
 #Cache sentence transformer model
 @st.cache_resource
@@ -177,37 +384,6 @@ def extract_content_from_url(url, extract_headings=False, retries=2, timeout=5):
         time.sleep(2)  # Wait before retrying
     return None, "", "", None
 
-#Function to create qa pipeline with transformers
-@st.cache_resource
-def load_qa_pipeline():
-    qa_pipeline = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
-    return qa_pipeline
-
-#chunks text
-def chunk_text(text: str, max_chunk_size: int = 500) -> List[str]:
-    sentences = text.split('.')
-    chunks = []
-    current_chunk = ''
-    for sentence in sentences:
-        if len(current_chunk.split()) + len(sentence.split()) <= max_chunk_size:
-            current_chunk += sentence + '.'
-        else:
-            chunks.append(current_chunk.strip())
-            current_chunk = sentence + '.'
-    if current_chunk:
-        chunks.append(current_chunk.strip())
-    return chunks
-
-def is_question_answered(qa_pipeline: QuestionAnsweringPipeline, question: str, context: str, threshold: float = 0.5) -> Dict:
-    try:
-        result = qa_pipeline(question=question, context=context)
-        if result['score'] >= threshold:
-            return {'answered': True, 'answer': result['answer'], 'score': result['score']}
-        else:
-            return {'answered': False, 'answer': None, 'score': result['score']}
-    except Exception as e:
-        return {'answered': False, 'answer': None, 'score': 0.0}
-
 
 # Function to get top unique domain results for a keyword (more than 10 URLs)
 @st.cache_data
@@ -215,17 +391,39 @@ def get_top_unique_domain_results(keyword, num_results=50, max_domains=50):
     try:
         results = []
         domains = set()
-        for url in search(keyword, num_results=num_results, lang="en"):
-            domain = urlparse(url).netloc
-            if domain not in domains:
-                domains.add(domain)
-                results.append(url)
-            if len(results) >= max_domains:
-                break
+
+        # Initialize SerpAPI parameters
+        params = {
+            "engine": "google",
+            "q": keyword,
+            "num": num_results,
+            "api_key": "521b14613c15f0bbaffc5790a502bff36e6191b1a6ed90f7d810a1b58bed5379",  # Replace with your actual API key
+            "hl": "en",
+            "gl": "us"
+        }
+
+        # Fetch search results using SerpAPI
+        search = GoogleSearch(params)
+        serpapi_results = search.get_dict()
+        # Extract organic results
+        organic_results = serpapi_results.get("organic_results", [])
+        people_also_ask = serpapi_results.get('related_questions', [])
+        print(organic_results)
+        st.session_state['related_questions'] = people_also_ask
+        for result in organic_results:
+            url = result.get("link")
+            if url:
+                domain = urlparse(url).netloc
+                if domain not in domains and "refact.co" not in domain:
+                    print(domain)
+                    domains.add(domain)
+                    results.append(url)
+                if len(results) >= max_domains:
+                    break
+
         return results
     except Exception as e:
-        st.error(f"Error during Google search: {e}")
-        return []
+        return(f"Error during Google search: {e}")
 
 def compute_embedding(text, embeddings_index):
     words = text.lower().split()
@@ -349,7 +547,7 @@ def perform_analysis(keyword):
     start_time = time.time()
     st.info('Retrieving top search results...')
     progress_bar0 = st.progress(0)
-    top_urls = get_top_unique_domain_results(keyword, num_results=100, max_domains=100)
+    top_urls = get_top_unique_domain_results(keyword, num_results=50, max_domains=50)
     if not top_urls:
         st.error('No results found.')
         return
@@ -361,7 +559,7 @@ def perform_analysis(keyword):
     retrieved_content = []
     successful_urls = []
     word_counts = []
-    max_contents = 12
+    max_contents = 5
     headings_data = []
     brand_names = set()  # To store unique brand names
     
@@ -435,7 +633,9 @@ def perform_analysis(keyword):
     # Lemmatize the documents
     documents_lemmatized = [lemmatize_text(doc) for doc in documents]
     
-    
+    st.session_state['documents'] = documents
+    st.session_state['documents_lemmatized'] = documents_lemmatized
+
     if headings_data:
         st.subheader("All Headings in the Content")
         # Create a DataFrame for headings
@@ -445,12 +645,22 @@ def perform_analysis(keyword):
             if (heading['text'].endswith('?') or
                 (heading['text'].split() and heading['text'].split()[0].lower() in question_words))
         ]
+        if 'related_questions' in st.session_state:
+            google_paa = st.session_state['related_questions']
+            google_paa_data = [{'Question': question, 'URL': 'No URL', 'Title': 'No Title'} for question in google_paa]
+            print("got it")
+
 
         # Remove duplicates based on both text and URL
         filtered_headings_data = list({(heading['text'], heading['url'], heading.get('title', 'No Title')) for heading in filtered_headings_data})
 
         # Convert to DataFrame
         paa_list_df = pd.DataFrame(filtered_headings_data, columns=['Question', 'URL', 'Title'])
+
+
+        # Append google_paa rows to the paa_list_df DataFrame
+        if 'related_questions' in st.session_state:
+            paa_list_df = pd.concat([paa_list_df, pd.DataFrame(google_paa_data)], ignore_index=True)
 
         # Update session state
         st.session_state['paa_list'] = paa_list_df
@@ -552,7 +762,7 @@ def perform_analysis(keyword):
     lda_matrix = lda_vectorizer.fit_transform(documents_lemmatized)
 
     # Set the number of topics
-    num_topics = 5  # You can adjust this number
+    num_topics = 3  # You can adjust this number
 
     # Initialize and fit the LDA model
     lda_model = LatentDirichletAllocation(
@@ -586,6 +796,8 @@ def perform_analysis(keyword):
         lda_top_terms = lda_top_terms[:50]
     
     st.session_state['lda_top_terms'] = lda_top_terms
+    st.session_state['lda_topics'] = topics_df
+
     # Combine LDA terms with TF-IDF terms
     combined_terms_set = set(lda_top_terms + filtered_feature_names)
     combined_terms = list(combined_terms_set)
@@ -947,7 +1159,7 @@ def display_editor():
                 
 
                 # Set a similarity threshold
-                similarity_threshold = 0.87  # Adjust based on your requirements
+                similarity_threshold = 0.6  # Adjust based on your requirements
 
                 # Filter questions based on similarity threshold
                 filtered_paa_list = non_branded_paa_list[non_branded_paa_list['Similarity'] >= similarity_threshold]
@@ -988,13 +1200,15 @@ def display_editor():
 
         combined_chart = (bar + line).properties(width=700, height=400).interactive()
         st.altair_chart(combined_chart, use_container_width=True)
+        st.table(st.session_state['lda_topics'])
+
     else:
         st.markdown(f"Word Count: {word_count}")
     
 
     # Display words to check in the sidebar
     with st.sidebar:
-        tab1, tab2, tab3 = st.tabs(["Word Frequency", "Edit Terms", "LDA Terms"])
+        tab1, tab2, tab3 = st.tabs(["Word Frequency", "Edit Terms", "Keywords"])
         with tab1:
             # Update sidebar label
             st.markdown("<div style='text-align: center; font-size: 24px; color: #ffaa00;'>Word Frequency</div>", unsafe_allow_html=True)
@@ -1081,14 +1295,63 @@ def display_editor():
             # Update comparison_chart_data in st.session_state
             st.session_state['comparison_chart_data'] = comparison_chart_data.copy()
         with tab3:
-            st.markdown("<div style='text-align: center; font-size: 24px; color: #FFD700;'>LDA Terms</div>", unsafe_allow_html=True)
+            # Change the header to reflect Deep Dive Keywords
+            st.markdown("<div style='text-align: center; font-size: 24px; color: #FFD700;'>Deep Dive Keywords</div>", unsafe_allow_html=True)
             st.markdown("<div style='padding: 1px; background-color: #f0f0f0; border-radius: 15px;'>", unsafe_allow_html=True)
-            lda_top_terms = st.session_state.get('lda_top_terms', [])
-            for term in lda_top_terms:
-                st.markdown(f"<div style='padding: 8px; background-color: #FFD700; color: black; border-radius: 5px; margin-bottom: 5px;'>"
-                            f"<strong>{term}</strong>"
-                            f"</div>", unsafe_allow_html=True)
+
+            # "Deep Dive Keywords" button
+            deep_dive_button = st.button("Deep Dive Keywords")
+            if deep_dive_button:
+                if 'keyword' in st.session_state:
+                    deep_dive(st.session_state['keyword'])
+                else:
+                    st.error("No keyword found. Please start a new analysis.")
+
+            # Display the deep_dive_data if available
+            if 'deep_dive_data' in st.session_state and not st.session_state['deep_dive_data'].empty:
+                # Iterate through each row and display similarly to LDA terms
+                for idx, row in st.session_state['deep_dive_data'].iterrows():
+                    term = row['Terms']
+                    relevance = row['Relevance']
+                    tfidf_score = row['TF-IDF']
+                    topic = row['Topic']
+
+                    st.markdown(
+                        f"<div style='padding: 8px; background-color: #FFD700; color: black; border-radius: 5px; margin-bottom: 5px;'>"
+                        f"<strong>{term}</strong><br>"
+                        f"Relevance: {relevance:.2f}<br>"
+                        f"TF-IDF: {tfidf_score:.3f}<br>"
+                        f"Topic: {topic}"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+            else:
+                st.warning("No deep dive data available. Please click 'Deep Dive Keywords' above.")
+
             st.markdown("</div>", unsafe_allow_html=True)
+
+            # Add a second button to pull Google Keyword Data
+            st.markdown("<div style='text-align: center; font-size: 24px; color: #4CAF50;'>Google Keyword Planner Data</div>", unsafe_allow_html=True)
+            google_data_button = st.button("Pull Google Keyword Data")
+
+            if google_data_button:
+                if 'keyword' in st.session_state and st.session_state['keyword'].strip():
+                    df, chart = pull_google_keyword_data(st.session_state['keyword'])
+                    if df is not None and not df.empty:
+                        # Display the results in a similar styled manner
+                        st.markdown("<div style='padding: 1px; background-color: #f0f0f0; border-radius: 15px;'>", unsafe_allow_html=True)
+
+                        # Display DataFrame
+                        st.subheader("Google Keyword Ideas")
+                        st.dataframe(df)
+
+                        # Display chart
+                        st.subheader("Keyword Length vs. Monthly Searches")
+                        st.altair_chart(chart, use_container_width=True)
+
+                        st.markdown("</div>", unsafe_allow_html=True)
+                else:
+                    st.error("No keyword found. Please start a new analysis or provide a seed keyword.")
             
                 # Tab 4: PAA Questions
         # with tab4:

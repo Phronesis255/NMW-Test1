@@ -84,7 +84,7 @@ try:
     print(f"CSV file saved at {csv_file_path}")
 
     # Display the first few rows of the DataFrame
-    display(df)
+    print(df)
     # prompt: Using dataframe df: plot the number of words in each "Keyword Text" value against the number of average monthly searches 
 
     # Import necessary libraries

@@ -1,23 +1,7 @@
-import re
-import math
-import time
-from urllib.parse import urlparse, urljoin
-
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
-import numpy as np
-import spacy
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-from sklearn.decomposition import LatentDirichletAllocation, TruncatedSVD  # Added TruncatedSVD for LSA
-
 import streamlit as st
 from streamlit_quill import st_quill  # Import the streamlit-quill component
 from googlesearch import search
 import altair as alt
-import os
-from google.ads.googleads.client import GoogleAdsClient
-from google.oauth2 import service_account
 
 st.set_page_config(page_title="Needs More Words! Optimize Your Content", page_icon="🔠")
 
@@ -60,84 +44,6 @@ def lemmatize_text(text):
         else:
             lemmatized_tokens.append(token.lemma_)
     return ' '.join(lemmatized_tokens)
-
-def pull_google_keyword_data(keyword):
-    # Replace with the path to your service account JSON key file
-    key_file_path = "nmw-t-1-e01bb49718d1.json"  # Adjust as necessary
-    developer_token = "p2Of8yLD6yKNWn7NrtlR3g"    # Replace with your actual developer token
-    login_customer_id = "8882181823"             # Replace with your actual login customer ID
-
-    # Location and Language (example values)
-    location_ids = ["1023191"]  # Example: New York, NY
-    language_id = "1000"        # English
-
-    try:
-        credentials = service_account.Credentials.from_service_account_file(key_file_path)
-        config = {
-            "developer_token": developer_token,
-            "use_proto_plus": True,
-            "json_key_file_path": key_file_path,
-        }
-        if login_customer_id:
-            config["login_customer_id"] = login_customer_id
-
-        # Initialize the Google Ads client
-        client = GoogleAdsClient.load_from_dict(config_dict=config)
-        print("Client successfully initialized")
-
-        keyword_plan_idea_service = client.get_service("KeywordPlanIdeaService")
-        google_ads_service = client.get_service("GoogleAdsService")
-        geo_target_constant_service = client.get_service("GeoTargetConstantService")
-
-        def map_locations_ids_to_resource_names(location_ids):
-            return [
-                geo_target_constant_service.geo_target_constant_path(location_id)
-                for location_id in location_ids
-            ]
-
-        location_rns = map_locations_ids_to_resource_names(location_ids)
-        language_rn = google_ads_service.language_constant_path(language_id)
-
-        request = client.get_type("GenerateKeywordIdeasRequest")
-        request.customer_id = login_customer_id
-        request.language = language_rn
-        request.geo_target_constants.extend(location_rns)
-        request.include_adult_keywords = False
-        request.keyword_plan_network = client.enums.KeywordPlanNetworkEnum.GOOGLE_SEARCH_AND_PARTNERS
-        request.keyword_seed.keywords.append(keyword)
-
-        keyword_ideas = keyword_plan_idea_service.generate_keyword_ideas(request=request)
-        keyword_data = []
-
-        for idea in keyword_ideas:
-            competition_value = idea.keyword_idea_metrics.competition.name if idea.keyword_idea_metrics.competition else "UNKNOWN"
-            avg_monthly_searches = idea.keyword_idea_metrics.avg_monthly_searches or 0
-            keyword_data.append({
-                "Keyword Text": idea.text,
-                "Average Monthly Searches": avg_monthly_searches,
-                "Competition": competition_value
-            })
-
-        df = pd.DataFrame(keyword_data)
-        if df.empty:
-            st.warning("No keyword data returned from Google Keyword Planner.")
-            return None, None
-
-        # Add a word count column
-        df['word_count'] = df['Keyword Text'].apply(lambda x: len(x.split()))
-
-        # Create the scatter plot
-        chart = alt.Chart(df).mark_point().encode(
-            x='word_count',
-            y='Average Monthly Searches',
-            tooltip=['Keyword Text', 'Average Monthly Searches', 'word_count']
-        ).properties(title="Word Count vs. Average Monthly Searches")
-
-        return df, chart
-
-    except Exception as e:
-        st.error(f"An error occurred while pulling Google Keyword Data: {e}")
-        return None, None
 
 # Function to extract content from a URL with retries and user-agent header
 @st.cache_data
@@ -773,27 +679,62 @@ def display_editor():
 
     # Display words to check in the sidebar
     with st.sidebar:
-        st.markdown("<div style='text-align: center; font-size: 24px; color: #4CAF50;'>Google Keyword Planner Data</div>", unsafe_allow_html=True)
-        google_data_button = st.button("Pull Google Keyword Data")
+        # Update sidebar label
+        st.markdown("<div style='text-align: center; font-size: 24px; color: #ffaa00;'>Word Frequency</div>", unsafe_allow_html=True)
+        st.markdown("<div style='padding: 1px; background-color: #f8f9fa; border-radius: 15px;'>", unsafe_allow_html=True)
+        if text_input.strip():
+            for idx, row in comparison_chart_data.iterrows():
+                word = row['Terms']
+                occurrences = row['Occurrences']
+                min_occurrences = row['Min Occurrences']
+                max_occurrences = row['Max Occurrences']
+                target = row['Target']
 
-        if google_data_button:
-            if 'keyword' in st.session_state and st.session_state['keyword'].strip():
-                df, chart = pull_google_keyword_data(st.session_state['keyword'])
-                if df is not None and not df.empty:
-                    # Display the results in a similar styled manner
-                    st.markdown("<div style='padding: 1px; background-color: #f0f0f0; border-radius: 15px;'>", unsafe_allow_html=True)
+                # Determine color based on occurrences
+                if occurrences < min_occurrences:
+                    color = "#E3E3E3"  # Light Gray
+                elif occurrences > max_occurrences:
+                    color = "#EE2222"  # Red
+                else:
+                    color = "#b0DD7c"  # Green
 
-                    # Display DataFrame
-                    st.subheader("Google Keyword Ideas")
-                    st.dataframe(df)
+                # Check if the term is an imported keyword
+                if row['IsImported']:
+                    # Different styling for imported keywords
+                    background_style = 'background-color: #E6FFE6;'  # Light green
+                else:
+                    background_style = f'background-color: {color};'
 
-                    # Display chart
-                    st.subheader("Keyword Length vs. Monthly Searches")
-                    st.altair_chart(chart, use_container_width=True)
+                st.markdown(f"<div style='display: flex; flex-direction: column; margin-bottom: 5px; padding: 8px; {background_style} color: black; border-radius: 5px;'>"
+                            f"<span style='font-weight: bold;'>{word}</span>"
+                            f"<span>Occurrences: {occurrences} / Target: ({min_occurrences}-{max_occurrences})</span>"
+                            f"</div>", unsafe_allow_html=True)
 
-                    st.markdown("</div>", unsafe_allow_html=True)
-            else:
-                st.error("No keyword found. Please start a new analysis or provide a seed keyword.")
+                # Calculate progress toward minimum occurrences
+                if min_occurrences > 0:
+                    progress = min(1.0, occurrences / min_occurrences)
+                else:
+                    progress = 1.0 if occurrences > 0 else 0
+
+                # Display the progress bar
+                st.progress(progress)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # Display imported keywords with their search volume and difficulty at the bottom
+    with st.sidebar:
+        if imported_keywords is not None and not imported_keywords.empty:
+            st.markdown("<div style='text-align: center; font-size: 20px; color: #2E8B57;'>Imported SEO Keywords</div>", unsafe_allow_html=True)
+            for idx, row in imported_keywords.iterrows():
+                keyword = row['Keyword']
+                search_volume = row['Avg. Search Volume (Last 6 months)']
+                difficulty = row['Keyword Difficulty']
+                occurrences = text_input.lower().count(keyword.lower())
+                st.markdown(f"<div style='padding: 8px; background-color: #E6FFE6; color: black; border-radius: 5px; margin-bottom: 5px;'>"
+                            f"<strong>{keyword}</strong><br>"
+                            f"Occurrences: {occurrences}<br>"
+                            f"Avg. Search Volume (6 months): {search_volume}<br>"
+                            f"Keyword Difficulty: {difficulty}"
+                            f"</div>", unsafe_allow_html=True)
 
 
 
@@ -811,17 +752,28 @@ def main():
         keyword = st.text_input('Enter a keyword to retrieve content:')
         start_analysis = st.button('Start Analysis')
 
-        if keyword and start_analysis:
+    if start_analysis:
+        if keyword:
+            st.session_state['keyword'] = keyword
             perform_analysis(keyword)
+            st.session_state['analysis_completed'] = True
+            st.session_state['step'] = 'editor'
+            st.success("Analysis completed! Proceeding to the Content Editor.")
+            st.rerun()
+        else:
+            st.error('Please enter a keyword.')
 
-        if st.session_state.get('analysis_completed', False) and not st.session_state['editor_started']:
-            continue_to_editor = st.button('Continue to Editor')
-            if continue_to_editor:
-                st.session_state['editor_started'] = True
-                st.rerun()
-
-    if st.session_state.get('editor_started', False):
+elif st.session_state['step'] == 'editor':
+    if not st.session_state['analysis_completed']:
+        st.warning("Please perform the analysis first.")
+        st.session_state['step'] = 'analysis'
+        st.rerun()
+    else:
+        st.header('✍️ Content Editor')
         display_editor()
 
-if __name__ == '__main__':
-    main()
+
+else:
+    # Default to analysis step if step is undefined
+    st.session_state['step'] = 'analysis'
+    st.rerun()

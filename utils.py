@@ -512,6 +512,61 @@ def create_correlation_radar(target, pearson_corr, spearman_corr):
     ax.legend(loc="upper right", bbox_to_anchor=(1.1, 1.1))
     st.pyplot(fig)
 
+def extract_headings_for_paa_list(top_urls):
+    """Extract headings for PAA list from the given top URLs."""
+    headings_data = []
+
+    for idx, url in enumerate(top_urls):
+        print(f"\nProcessing URL {idx+1}/{len(top_urls)} for headings: {url}")
+        t, _, _, heads, _ = extract_content_from_url(url, extract_headings=True)
+        if t is None:
+            t = "No Title"
+
+        if heads:
+            for h in heads:
+                if 'text' in h:
+                    headings_data.append({
+                        'text': h['text'].strip(),
+                        'url': url,
+                        'title': t
+                    })
+        time.sleep(0.5)
+
+    if headings_data:
+        question_words = ['how', 'why', 'what', 'who', 'which', 'is', 'are', 'can', 'does', 'will']
+        # headings that either end in ? or start with a question word
+        filtered_headings_data = [
+            h for h in headings_data
+            if (h['text'].endswith('?')
+               or (h['text'].split() and h['text'].split()[0].lower() in question_words))
+        ]
+        # remove duplicates by (text, url, title)
+        unique_set = {(hd['text'], hd['url'], hd['title']) for hd in filtered_headings_data}
+        filtered_headings_data = [
+            {'text': t, 'url': u, 'title': ti}
+            for (t,u,ti) in unique_set
+        ]
+        # fetch PAA
+        google_paa = []
+        # remove duplicates across PAA
+
+        # Combine them into a DataFrame
+        if len(filtered_headings_data) > 0:
+            df_hd = pd.DataFrame(filtered_headings_data, columns=['text','url','title'])
+            paa_rows = [{'Question': q, 'URL': 'No URL', 'Title': 'No Title'} for q in google_paa]
+            # Convert headings to same columns
+            heading_rows = df_hd.rename(columns={'text':'Question','url':'URL','title':'Title'})
+            # combine
+            paa_df = pd.concat([heading_rows, pd.DataFrame(paa_rows)], ignore_index=True)
+
+            st.session_state['paa_list'] = paa_df
+            # Keep a separate headings_df for detailed headings
+        else:
+            # fallback empty
+            st.session_state['paa_list'] = pd.DataFrame(columns=['Question','URL','Title'])
+    else:
+        st.session_state['paa_list'] = pd.DataFrame(columns=['Question','URL','Title'])
+
 
 def display_serp_details():
     st.header("SERP Details")
@@ -520,6 +575,10 @@ def display_serp_details():
     # Safety check: ensure the analysis was run
     if 'serp_contents' not in st.session_state or not st.session_state['serp_contents']:
         st.warning("No SERP content available. Please run the analysis first.")
+
+    # Extract headings for PAA list
+    if 'top_urls' in st.session_state:
+        extract_headings_for_paa_list(st.session_state['top_urls'])
 
     # 1) Process each SERP entry: extract detailed data and compute features
     features_list = []
@@ -631,8 +690,11 @@ def display_serp_details():
         # Compute NER count for each question
         paa_df['NER Count'] = paa_df['Question'].apply(compute_ner_count)
         
+        # Filter out rows with similarity below 0.15 or NER count above 2
+        paa_df = paa_df[(paa_df['Similarity'] >= 0.15) & (paa_df['NER Count'] <= 2)]
+        
         st.dataframe(paa_df[['Question', 'Similarity', 'NER Count']])
-    print("SERP Details displayed.")
+
     # 6) Button to return to the Editor screen
     if st.button("Return to Editor"):
         st.session_state['step'] = 'editor'
@@ -769,45 +831,6 @@ def perform_analysis(keyword):
 
     # 3) Clean and lemmatize
     docs_lemmatized = [lemmatize_text(doc) for doc in retrieved_content]
-
-    # 4) Extract PAA-like headings + People Also Ask
-    if headings_data:
-        question_words = ['how', 'why', 'what', 'who', 'which', 'is', 'are', 'can', 'does', 'will']
-        # headings that either end in ? or start with a question word
-        filtered_headings_data = [
-            h for h in headings_data
-            if (h['text'].endswith('?')
-               or (h['text'].split() and h['text'].split()[0].lower() in question_words))
-        ]
-        # remove duplicates by (text, url, title)
-        unique_set = {(hd['text'], hd['url'], hd['title']) for hd in filtered_headings_data}
-        filtered_headings_data = [
-            {'text': t, 'url': u, 'title': ti}
-            for (t,u,ti) in unique_set
-        ]
-        # fetch PAA
-        google_paa = []
-        # remove duplicates across PAA
-
-        # Combine them into a DataFrame
-        if len(filtered_headings_data) > 0 or len(google_paa) > 0:
-            df_hd = pd.DataFrame(filtered_headings_data, columns=['text','url','title'])
-            paa_rows = [{'Question': q, 'URL': 'No URL', 'Title': 'No Title'} for q in google_paa]
-            # Convert headings to same columns
-            heading_rows = df_hd.rename(columns={'text':'Question','url':'URL','title':'Title'})
-            # combine
-            paa_df = pd.concat([heading_rows, pd.DataFrame(paa_rows)], ignore_index=True)
-
-            st.session_state['paa_list'] = paa_df
-            # Keep a separate headings_df for detailed headings
-            st.session_state['headings_df'] = df_hd
-        else:
-            # fallback empty
-            st.session_state['paa_list'] = pd.DataFrame(columns=['Question','URL','Title'])
-            st.session_state['headings_df'] = pd.DataFrame(columns=['text','url','title'])
-    else:
-        st.session_state['paa_list'] = pd.DataFrame(columns=['Question','URL','Title'])
-        st.session_state['headings_df'] = pd.DataFrame(columns=['text','url','title'])
 
     # 5) Display top search results
     st.subheader('Top Search Results')

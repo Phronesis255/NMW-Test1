@@ -816,9 +816,8 @@ def perform_analysis(keyword):
             for (t,u,ti) in unique_set
         ]
         # fetch PAA
-        google_paa = paa.get_related_questions(keyword, 5)
+        google_paa = []
         # remove duplicates across PAA
-        google_paa = remove_duplicate_questions(google_paa)
 
         # Combine them into a DataFrame
         if len(filtered_headings_data) > 0 or len(google_paa) > 0:

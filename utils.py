@@ -515,7 +515,7 @@ def create_correlation_radar(target, pearson_corr, spearman_corr):
 
 def display_serp_details():
     st.header("SERP Details")
-    st.write("Explore additional text metrics for the top SERPs (excluding footer content).")
+    st.write("Analyze the SERP in more detail.")
     print("Displaying SERP Details")
     # Safety check: ensure the analysis was run
     if 'serp_contents' not in st.session_state or not st.session_state['serp_contents']:
@@ -636,6 +636,10 @@ def display_serp_details():
         paa_embeddings = model.encode(paa_df['Question'].tolist())
         similarities = cosine_similarity([keyword_embedding], paa_embeddings)[0]
         paa_df['Similarity'] = similarities
+
+        # Filter out branded questions
+        paa_df = paa_df[paa_df['Question'].apply(is_not_branded)]
+        
         st.dataframe(paa_df[['Question', 'Similarity']])
 
     # 6) Button to return to the Editor screen

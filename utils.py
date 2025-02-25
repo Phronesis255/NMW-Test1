@@ -645,7 +645,7 @@ def display_serp_details():
         paa_df['NER Count'] = paa_df['Question'].apply(compute_ner_count)
         
         st.dataframe(paa_df[['Question', 'Similarity', 'NER Count']])
-
+    print("SERP Details displayed.")
     # 6) Button to return to the Editor screen
     if st.button("Return to Editor"):
         st.session_state['step'] = 'editor'

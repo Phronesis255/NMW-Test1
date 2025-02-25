@@ -541,7 +541,7 @@ def display_serp_details():
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     for col in numeric_cols:
         chart = alt.Chart(df).mark_bar().encode(
-            alt.X(f"{col}:Q", bin=alt.Bin(maxbins=30), title=col),
+            alt.X(f"{col}:Q", bin=alt.Bin(maxbins=15), title=col),
             alt.Y("count()", title="Frequency")
         ).properties(
             width=300,
@@ -637,10 +637,14 @@ def display_serp_details():
         similarities = cosine_similarity([keyword_embedding], paa_embeddings)[0]
         paa_df['Similarity'] = similarities
 
-        # Filter out branded questions
+        # Filter out branded questions and questions with less than 4 words
         paa_df = paa_df[paa_df['Question'].apply(is_not_branded)]
+        paa_df = paa_df[paa_df['Question'].apply(lambda x: len(x.split()) >= 4)]
         
-        st.dataframe(paa_df[['Question', 'Similarity']])
+        # Compute NER count for each question
+        paa_df['NER Count'] = paa_df['Question'].apply(compute_ner_count)
+        
+        st.dataframe(paa_df[['Question', 'Similarity', 'NER Count']])
 
     # 6) Button to return to the Editor screen
     if st.button("Return to Editor"):

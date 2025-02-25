@@ -513,161 +513,136 @@ def create_correlation_radar(target, pearson_corr, spearman_corr):
     st.pyplot(fig)
 
 
-def display_serp_details():
-    st.header("SERP Details")
-    st.write("Explore additional text metrics for the top SERPs (excluding footer content).")
+    def display_serp_details():
+        st.header("SERP Details")
+        st.write("Explore additional text metrics for the top SERPs (excluding footer content).")
 
-    # Safety check: ensure the analysis was run
-    if 'serp_contents' not in st.session_state or not st.session_state['serp_contents']:
-        st.warning("No SERP content available. Please run the analysis first.")
+        # Safety check: ensure the analysis was run
+        if 'serp_contents' not in st.session_state or not st.session_state['serp_contents']:
+            st.warning("No SERP content available. Please run the analysis first.")
 
-    # 1) Process each SERP entry: extract detailed data and compute features
-    features_list = []
-    serp_data = st.session_state['serp_contents']
-    for row in serp_data:
-        # Use the soup object and URL stored in each entry.
-        details = detailed_extraction(row['soup'], row['url'])
-        # Compute features for this SERP entry using its position.
-        feat = compute_serp_features(details, row['position'])
-        features_list.append(feat)
+        # 1) Process each SERP entry: extract detailed data and compute features
+        features_list = []
+        serp_data = st.session_state['serp_contents']
+        for row in serp_data:
+            # Use the soup object and URL stored in each entry.
+            details = detailed_extraction(row['soup'], row['url'])
+            # Compute features for this SERP entry using its position.
+            feat = compute_serp_features(details, row['position'])
+            features_list.append(feat)
 
-    # 2) Create a DataFrame for analysis and display
-    df = pd.DataFrame(features_list)
-    st.subheader("Computed Features for Each URL")
-    st.dataframe(df)
+        # 2) Create a DataFrame for analysis and display
+        df = pd.DataFrame(features_list)
+        st.subheader("Computed Features for Each URL")
+        st.dataframe(df)
 
-    # 3) Visualize distributions for each numeric metric
-    st.subheader("Distributions of Numeric Metrics")
-    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    for col in numeric_cols:
-        chart = alt.Chart(df).mark_bar().encode(
-            alt.X(f"{col}:Q", bin=alt.Bin(maxbins=30), title=col),
-            alt.Y("count()", title="Frequency")
-        ).properties(
-            width=300,
-            height=200,
-            title=f"Distribution of {col}"
-        )
-        st.altair_chart(chart, use_container_width=True)
+        # 3) Visualize distributions for each numeric metric
+        st.subheader("Distributions of Numeric Metrics")
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        for col in numeric_cols:
+            chart = alt.Chart(df).mark_bar().encode(
+                alt.X(f"{col}:Q", bin=alt.Bin(maxbins=30), title=col),
+                alt.Y("count()", title="Frequency")
+            ).properties(
+                width=300,
+                height=200,
+                title=f"Distribution of {col}"
+            )
+            st.altair_chart(chart, use_container_width=True)
 
-    # 4) Display a correlation heatmap for the numeric features
-    st.subheader("Correlation Matrix Heatmap")
-    if numeric_cols:
-        corr = df[numeric_cols].corr().reset_index().melt("index")
-        chart_corr = alt.Chart(corr).mark_rect().encode(
-            x=alt.X("variable:N", title="Feature"),
-            y=alt.Y("index:N", title="Feature"),
-            color=alt.Color("value:Q", scale=alt.Scale(scheme="redblue", domain=(-1, 1))),
-            tooltip=["index", "variable", alt.Tooltip("value:Q", format=".2f")]
-        ).properties(width=500, height=500)
-        st.altair_chart(chart_corr, use_container_width=True)
-    else:
-        st.info("No numeric data available for correlation analysis.")
+        # 4) Display a correlation heatmap for the numeric features
+        st.subheader("Correlation Matrix Heatmap")
+        if numeric_cols:
+            corr = df[numeric_cols].corr().reset_index().melt("index")
+            chart_corr = alt.Chart(corr).mark_rect().encode(
+                x=alt.X("variable:N", title="Feature"),
+                y=alt.Y("index:N", title="Feature"),
+                color=alt.Color("value:Q", scale=alt.Scale(scheme="redblue", domain=(-1, 1))),
+                tooltip=["index", "variable", alt.Tooltip("value:Q", format=".2f")]
+            ).properties(width=500, height=500)
+            st.altair_chart(chart_corr, use_container_width=True)
+        else:
+            st.info("No numeric data available for correlation analysis.")
 
-    # 5) Example scatter plot: Word Count vs. Content Readability
-    st.subheader("Scatter Plot: Word Count vs. Content Readability")
-    if "word_count" in df.columns and "content_readability" in df.columns:
-        scatter = alt.Chart(df).mark_circle(size=100).encode(
-            x=alt.X("word_count:Q", title="Word Count"),
-            y=alt.Y("content_readability:Q", title="Content Readability (Flesch-Kincaid Grade)"),
-            color=alt.Color("position:O", title="SERP Position", scale=alt.Scale(scheme="purplered")),
-            tooltip=[
-                alt.Tooltip("url:N", title="URL"),
-                alt.Tooltip("word_count:Q", title="Word Count"),
-                alt.Tooltip("content_readability:Q", title="Content Readability"),
-                alt.Tooltip("position:O", title="SERP Position")
-            ]
+        # 5) Example scatter plot: Word Count vs. Content Readability
+        st.subheader("Scatter Plot: Word Count vs. Content Readability")
+        if "word_count" in df.columns and "content_readability" in df.columns:
+            scatter = alt.Chart(df).mark_circle(size=100).encode(
+                x=alt.X("word_count:Q", title="Word Count"),
+                y=alt.Y("content_readability:Q", title="Content Readability (Flesch-Kincaid Grade)"),
+                color=alt.Color("position:O", title="SERP Position", scale=alt.Scale(scheme="purplered")),
+                tooltip=[
+                    alt.Tooltip("url:N", title="URL"),
+                    alt.Tooltip("word_count:Q", title="Word Count"),
+                    alt.Tooltip("content_readability:Q", title="Content Readability"),
+                    alt.Tooltip("position:O", title="SERP Position")
+                ]
+            ).properties(width=500, height=400)
+            st.altair_chart(scatter, use_container_width=True)
+
+        # POS Counts - Adverbs, Adjectives, Verbs
+        st.subheader("Parts of Speech (POS) Analysis")
+
+        pos_melted = df.melt(id_vars=["position"], value_vars=["adverbs", "adjectives", "verbs"],
+                              var_name="POS", value_name="Count")
+
+        pos_chart = alt.Chart(pos_melted).mark_bar().encode(
+            x=alt.X("position:O", title="SERP Position"),
+            y=alt.Y("Count:Q", title="POS Count"),
+            color=alt.Color("POS:N", title="Part of Speech"),
+            tooltip=[alt.Tooltip("POS:N", title="Part of Speech"), alt.Tooltip("Count:Q", title="Count")]
+        ).properties(width=600, height=400)
+        
+        st.altair_chart(pos_chart, use_container_width=True)
+        st.subheader("Scatter Plots: POS Proportions vs. Readability")
+
+        # 3) Grouped Bar Chart: Average POS Counts Across Readability Levels
+        st.subheader("Average POS Usage Across Readability Levels")
+
+        readability_bins = pd.cut(df["content_readability"], bins=[0, 5, 10, 15, 20, 25], labels=["0-5", "5-10", "10-15", "15-20", "20+"])
+        df["readability_group"] = readability_bins
+
+        avg_pos_df = df.groupby("readability_group")[["adverbs", "adjectives", "verbs"]].mean().reset_index().melt(id_vars=["readability_group"], var_name="POS", value_name="Average Usage")
+
+        avg_pos_chart = alt.Chart(avg_pos_df).mark_bar().encode(
+            x=alt.X("readability_group:N", title="Readability Score Range"),
+            y=alt.Y("Average Usage:Q", title="Average POS Usage"),
+            color=alt.Color("POS:N", title="Part of Speech"),
+            tooltip=[alt.Tooltip("POS:N", title="Part of Speech"), alt.Tooltip("Average Usage:Q", title="Usage", format=".4f")]
+        ).properties(width=600, height=400)
+        
+        st.altair_chart(avg_pos_chart, use_container_width=True)
+
+        # Violin Plot: Readability by SERP Position
+        st.subheader("Violin Plot: Content Readability by SERP Position")
+        violin_chart = alt.Chart(df).transform_density(
+            'content_readability',
+            as_=['content_readability', 'density'],
+            groupby=['position']
+        ).mark_area(orient='horizontal').encode(
+            y=alt.Y('position:O', title='SERP Position'),
+            x=alt.X('content_readability:Q', title='Content Readability (Flesch-Kincaid Grade'),
+            color='position:N'
         ).properties(width=500, height=400)
-        st.altair_chart(scatter, use_container_width=True)
+        st.altair_chart(violin_chart, use_container_width=True)
 
-    # POS Counts - Adverbs, Adjectives, Verbs
-    st.subheader("Parts of Speech (POS) Analysis")
+        # Compute similarity of questions to the keyword
+        if 'paa_list' in st.session_state and 'keyword' in st.session_state:
+            st.subheader("PAA Questions Similarity to Keyword")
+            paa_df = st.session_state['paa_list']
+            keyword = st.session_state['keyword']
+            model = load_embedding_model()
+            keyword_embedding = model.encode([keyword])[0]
+            paa_embeddings = model.encode(paa_df['Question'].tolist())
+            similarities = cosine_similarity([keyword_embedding], paa_embeddings)[0]
+            paa_df['Similarity'] = similarities
+            st.dataframe(paa_df[['Question', 'Similarity']])
 
-    pos_melted = df.melt(id_vars=["position"], value_vars=["adverbs", "adjectives", "verbs"],
-                          var_name="POS", value_name="Count")
+        # 6) Button to return to the Editor screen
+        if st.button("Return to Editor"):
+            st.session_state['step'] = 'editor'
+            st.rerun()
 
-    pos_chart = alt.Chart(pos_melted).mark_bar().encode(
-        x=alt.X("position:O", title="SERP Position"),
-        y=alt.Y("Count:Q", title="POS Count"),
-        color=alt.Color("POS:N", title="Part of Speech"),
-        tooltip=[alt.Tooltip("POS:N", title="Part of Speech"), alt.Tooltip("Count:Q", title="Count")]
-    ).properties(width=600, height=400)
-    
-    st.altair_chart(pos_chart, use_container_width=True)
-    st.subheader("Scatter Plots: POS Proportions vs. Readability")
-
-    # 3) Grouped Bar Chart: Average POS Counts Across Readability Levels
-    st.subheader("Average POS Usage Across Readability Levels")
-
-    readability_bins = pd.cut(df["content_readability"], bins=[0, 5, 10, 15, 20, 25], labels=["0-5", "5-10", "10-15", "15-20", "20+"])
-    df["readability_group"] = readability_bins
-
-    avg_pos_df = df.groupby("readability_group")[["adverbs", "adjectives", "verbs"]].mean().reset_index().melt(id_vars=["readability_group"], var_name="POS", value_name="Average Usage")
-
-    avg_pos_chart = alt.Chart(avg_pos_df).mark_bar().encode(
-        x=alt.X("readability_group:N", title="Readability Score Range"),
-        y=alt.Y("Average Usage:Q", title="Average POS Usage"),
-        color=alt.Color("POS:N", title="Part of Speech"),
-        tooltip=[alt.Tooltip("POS:N", title="Part of Speech"), alt.Tooltip("Average Usage:Q", title="Usage", format=".4f")]
-    ).properties(width=600, height=400)
-    
-    st.altair_chart(avg_pos_chart, use_container_width=True)
-
-    # Violin Plot: Readability by SERP Position
-    st.subheader("Violin Plot: Content Readability by SERP Position")
-    violin_chart = alt.Chart(df).transform_density(
-        'content_readability',
-        as_=['content_readability', 'density'],
-        groupby=['position']
-    ).mark_area(orient='horizontal').encode(
-        y=alt.Y('position:O', title='SERP Position'),
-        x=alt.X('content_readability:Q', title='Content Readability (Flesch-Kincaid Grade'),
-        color='position:N'
-    ).properties(width=500, height=400)
-    st.altair_chart(violin_chart, use_container_width=True)
-
-
-    # # Calculate Pearson and Spearman correlation matrices
-    # pearson_corr = df[numeric_cols].corr(method='pearson')
-    # spearman_corr = df[numeric_cols].corr(method='spearman')
-    
-    # st.write("#### Pearson Correlation Matrix")
-    # st.dataframe(pearson_corr)
-    # st.write("#### Spearman Correlation Matrix")
-    # st.dataframe(spearman_corr)
-    
-    # # Heatmap visualization for Pearson correlations
-    # plt.figure(figsize=(10,8))
-    # sns.heatmap(pearson_corr, annot=True, cmap='coolwarm', fmt='.2f')
-    # plt.title("Pearson Correlation Heatmap")
-    # st.pyplot(plt.gcf())
-    # plt.clf()
-    
-    # # Heatmap visualization for Spearman correlations
-    # plt.figure(figsize=(10,8))
-    # sns.heatmap(spearman_corr, annot=True, cmap='coolwarm', fmt='.2f')
-    # plt.title("Spearman Correlation Heatmap")
-    # st.pyplot(plt.gcf())
-    # plt.clf()
-    
-    # # Choose a target metric from the SERP details (e.g., content_readability)
-    # target = "position"
-    # if target in pearson_corr.columns:
-    #     st.write(f"#### Correlations with {target} (Pearson)")
-    #     st.write(pearson_corr[target].sort_values(ascending=False))
-        
-    #     st.write(f"#### Correlations with {target} (Spearman)")
-    #     st.write(spearman_corr[target].sort_values(ascending=False))
-        
-    #     # Create a radar chart comparing Pearson and Spearman correlations with the target
-    #     create_correlation_radar(target, pearson_corr, spearman_corr)
-    # else:
-    #     st.info(f"Target '{target}' not found in the data.")
-
-    # 6) Button to return to the Editor screen
-    if st.button("Return to Editor"):
-        st.session_state['step'] = 'editor'
-        st.rerun()
 
 def filter_terms(terms):
     """Filter out numeric, stopword, or other low-value tokens."""

@@ -83,8 +83,16 @@ def compute_ner_count(text):
     entities = ner_pipeline(text[:2000])  # Limit to first 2000 characters for speed
     return len(entities)
 
-def compute_pos_counts(text):
-    """Count the number of adverbs, adjectives, and verbs in the given text."""
+def compute_pos_counts(text, normalize=True):
+    """Count the number of adverbs, adjectives, and verbs in the given text.
+    
+    Args:
+        text (str): The input text to analyze.
+        normalize (bool): Whether to return normalized counts. Defaults to True.
+    
+    Returns:
+        dict: A dictionary with counts of adverbs, adjectives, and verbs.
+    """
     doc = nlp(text)
     total_words = len([token for token in doc if token.is_alpha])  # Exclude punctuation
 
@@ -93,11 +101,11 @@ def compute_pos_counts(text):
         "adjectives": sum(1 for token in doc if token.pos_ == "ADJ"),
         "verbs": sum(1 for token in doc if token.pos_ == "VERB")
     }
-    # Normalize by word count
-    if total_words > 0:
+
+    if normalize and total_words > 0:
         for key in pos_counts:
             pos_counts[key] /= total_words  # Normalize each POS count
-    else:
+    elif normalize:
         for key in pos_counts:
             pos_counts[key] = 0  # Avoid division by zero
 
@@ -605,13 +613,18 @@ def display_serp_details():
     
     st.altair_chart(avg_pos_chart, use_container_width=True)
 
-    # Box Plot: Readability by SERP Position
-    st.subheader("Box Plot: Content Readability by SERP Position")
-    box_chart = alt.Chart(df).mark_boxplot().encode(
-         x=alt.X("position:O", title="SERP Position"),
-         y=alt.Y("content_readability:Q", title="Content Readability (Flesch-Kincaid Grade)")
+    # Violin Plot: Readability by SERP Position
+    st.subheader("Violin Plot: Content Readability by SERP Position")
+    violin_chart = alt.Chart(df).transform_density(
+        'content_readability',
+        as_=['content_readability', 'density'],
+        groupby=['position']
+    ).mark_area(orient='horizontal').encode(
+        y=alt.Y('position:O', title='SERP Position'),
+        x=alt.X('content_readability:Q', title='Content Readability (Flesch-Kincaid Grade'),
+        color='position:N'
     ).properties(width=500, height=400)
-    st.altair_chart(box_chart, use_container_width=True)
+    st.altair_chart(violin_chart, use_container_width=True)
 
 
     # # Calculate Pearson and Spearman correlation matrices
@@ -1353,6 +1366,7 @@ def display_editor():
             # Only compute/show stats if there's content
             if text_input.strip():
                 stats = compute_text_stats_from_html(text_input)
+                pos_counts = compute_pos_counts(text_input, normalize=False)
                 
                 st.write("**Paragraph Count:**", stats["paragraph_count"])
                 st.write("**Sentence Count:**", stats["sentence_count"])
@@ -1361,6 +1375,9 @@ def display_editor():
                 st.write("**Avg Words per Sentence:**", f"{stats['avg_words_per_sentence']:.2f}")
                 st.write("**Flesch Reading Ease:**", f"{stats['flesch_reading_ease']:.2f}")
                 st.write("**Flesch-Kincaid Grade:**", stats['flesch_kincaid_grade'])
+                st.write("**Adverbs Count:**", pos_counts["adverbs"])
+                st.write("**Adjectives Count:**", pos_counts["adjectives"])
+                st.write("**Verbs Count:**", pos_counts["verbs"])
 
                 # Visualize distribution of sentence lengths (words per sentence)
                 sentence_lengths = stats["sentence_lengths"]
@@ -1374,7 +1391,7 @@ def display_editor():
                         alt.Chart(length_df)
                         .mark_bar()
                         .encode(
-                            x=alt.X("sentence_length:Q", bin=alt.Bin(maxbins=30), title="Words per Sentence"),
+                            x=alt.X("sentence_length:Q", bin=alt.Bin(maxbins=10), title="Words per Sentence"),
                             y=alt.Y("count()", title="Frequency")
                         )
                         .properties(width=300, height=200)

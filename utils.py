@@ -980,7 +980,7 @@ def display_editor():
     ideal_word_count = st.session_state.get('ideal_word_count', None)
 
     # ---- NEW BUTTON to see SERP details ----
-    if st.button("Analyze SERP in Detail", key='serp_details',type='secondary'):
+    if st.button("Analyze SERP in Detail", key='serp_details',type='primary'):
         st.session_state['step'] = 'serp_details'
         st.rerun()
 

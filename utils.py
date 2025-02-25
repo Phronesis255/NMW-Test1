@@ -613,19 +613,6 @@ def display_serp_details():
     
     st.altair_chart(avg_pos_chart, use_container_width=True)
 
-    # Violin Plot: Readability by SERP Position
-    st.subheader("Violin Plot: Content Readability by SERP Position")
-    violin_chart = alt.Chart(df).transform_density(
-        'content_readability',
-        as_=['content_readability', 'density'],
-        groupby=['position']
-    ).mark_area(orient='horizontal').encode(
-        y=alt.Y('position:O', title='SERP Position'),
-        x=alt.X('content_readability:Q', title='Content Readability (Flesch-Kincaid Grade'),
-        color='position:N'
-    ).properties(width=500, height=400)
-    st.altair_chart(violin_chart, use_container_width=True)
-
     # Compute similarity of questions to the keyword
     if 'paa_list' in st.session_state and 'keyword' in st.session_state:
         st.subheader("PAA Questions Similarity to Keyword")

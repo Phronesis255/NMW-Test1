@@ -26,5 +26,13 @@ torch
 transformers
 people_also_ask
 sentence_transformers
+wordcloud
+st_login_form
+python-dotenv
+supabase
+plotly
+textstat
+beautifulsoup4
+
 
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.5.0/en_core_web_sm-3.5.0-py3-none-any.whl

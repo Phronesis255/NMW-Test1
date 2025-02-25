@@ -1,49 +1,117 @@
 import streamlit as st
-
 st.set_page_config(page_title="Needs More Words!", page_icon="🔠")
+import os
+from dotenv import load_dotenv
 
-from utils import *
 
-# Initialize session state variables
-if 'analysis_completed' not in st.session_state:
-    st.session_state['analysis_completed'] = False
-if 'step' not in st.session_state:
-    st.session_state['step'] = 'analysis'
+# 1) Load environment variables
+load_dotenv()
 
-# Title and description
-st.title('Needs More Words! Optimize Your Content')
 
-# Control flow based on the current step
-if st.session_state['step'] == 'analysis':
-    st.write("""
-    Welcome to the **Needs More Words** app! Begin by entering a keyword to retrieve and analyze content.
-    """)
-    # Keyword input and Start Analysis button
-    keyword = st.text_input('Enter a keyword to retrieve content:')
-    start_analysis = st.button('Start Analysis')
+# For st_login_form, you can specify them here OR rely on environment variables
+SUPABASE_URL = os.getenv("SUPABASE_URL")      # e.g. "https://<project>.supabase.co"
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_TABLE="users"
 
-    if start_analysis:
-        if keyword:
-            st.session_state['keyword'] = keyword
-            perform_analysis(keyword)
-            st.session_state['analysis_completed'] = True
-            st.session_state['step'] = 'editor'
-            st.success("Analysis completed! Proceeding to the Content Editor.")
+
+# 2) Import st_login_form
+from st_login_form import login_form
+
+# 3) Your existing utilities
+from utils import perform_analysis, display_editor, display_serp_details
+
+def main_app():
+    """Main content after successful login."""
+    # Initialize session state variables
+    if 'analysis_completed' not in st.session_state:
+        st.session_state['analysis_completed'] = False
+    if 'step' not in st.session_state:
+        st.session_state['step'] = 'analysis'
+
+    with st.sidebar:
+        # Let users log out
+        if st.button("Log Out"):
+            st.session_state["authenticated"] = False
+            st.session_state["username"] = None
+            st.rerun()
+
+    st.title('Needs More Words! Optimize Your Content')
+
+    # Standard app flow
+    if st.session_state['step'] == 'analysis':
+        st.write("""
+        Welcome to the **Needs More Words** app!
+        Begin by entering a keyword to retrieve and analyze content.
+        """)
+        keyword = st.text_input('Enter a keyword:')
+        
+        if st.button('Start Analysis'):
+            if keyword:
+                st.session_state['keyword'] = keyword
+                perform_analysis(keyword)
+                st.session_state['analysis_completed'] = True
+                st.session_state['step'] = 'editor'
+                st.success("Analysis completed! Proceeding to the Content Editor.")
+                st.rerun()
+            else:
+                st.error('Please enter a keyword.')
+
+    elif st.session_state['step'] == 'editor':
+        if not st.session_state['analysis_completed']:
+            st.warning("Please perform the analysis first.")
+            st.session_state['step'] = 'analysis'
             st.rerun()
         else:
-            st.error('Please enter a keyword.')
+            st.header('✍️ Content Editor')
+            display_editor()
 
-elif st.session_state['step'] == 'editor':
-    if not st.session_state['analysis_completed']:
-        st.warning("Please perform the analysis first.")
+    elif st.session_state['step'] == 'serp_details':
+        # Our new step that shows detailed SERP analysis
+        display_serp_details()
+
+    else:
+        # Fallback to default
         st.session_state['step'] = 'analysis'
         st.rerun()
+
+def main():
+    """
+    Entry point: Show the st_login_form if not authenticated.
+    Once authenticated, hide the login form and only show the welcome 
+    message once. Then display the main_app.
+    """
+    # 1) Initialize session keys if needed
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+        st.session_state["username"] = None
+
+    # 2) Only show the login form if not authenticated
+    if not st.session_state["authenticated"]:
+        # Show the login form
+        client = login_form()
+
+        # If login_form sets authenticated = True, immediately rerun
+        if st.session_state["authenticated"]:
+            st.rerun()
     else:
-        st.header('✍️ Content Editor')
-        display_editor()
+        # 3) Show the welcome message only once
+        if "welcome_shown" not in st.session_state:
+            if st.session_state["username"]:
+                st.success(f"Welcome {st.session_state['username']}!")
+                user_email = st.session_state["username"]
+            else:
+                st.success("Welcome, guest!")
+                user_email = "guest"
+            # Mark that we have shown the welcome message
+            st.session_state["welcome_shown"] = True
 
+        # 4) Then show the main app
+        main_app()
 
-else:
-    # Default to analysis step if step is undefined
-    st.session_state['step'] = 'analysis'
-    st.rerun()
+# Run it!
+if __name__ == "__main__":
+    # If no session keys exist yet, init them
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+        st.session_state["username"] = None
+    main()

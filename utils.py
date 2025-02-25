@@ -732,7 +732,6 @@ def perform_analysis(keyword):
         return
     st.session_state['top_urls'] = top_urls
 
-    top_urls=top_urls[:max_contents]
     # 2) Extract content from top URLs
     titles, favicons, retrieved_content = [], [], []
     headings_data = []
@@ -742,8 +741,10 @@ def perform_analysis(keyword):
 
     progress = st.progress(0)
     for idx, url in enumerate(top_urls):
+        if len(retrieved_content) >= max_contents:
+            break
         print(f"\nProcessing URL {idx+1}/{len(top_urls)}: {url}")
-        progress.progress(idx / max_contents)
+        progress.progress(idx / len(top_urls))
         status_placeholder.info(f"Retrieving content from {url}...")
         t, content, favicon_url, heads, soup = extract_content_from_url(url, extract_headings=True)
         if t is None:
@@ -765,30 +766,24 @@ def perform_analysis(keyword):
 
         if content:
             wc = len(content.split())
-            if len(retrieved_content) < max_contents:
-                retrieved_content.append(content)
-                successful_urls.append(url)
-                titles.append(t)
-                favicons.append(favicon_url)
-                # anchor word count at least 1000
-                word_counts.append(wc if wc > 1000 else 1000)
-                st.session_state['serp_contents'].append({
-                    "position": idx + 1,      # 1-based SERP rank
-                    "url": url,
-                    "title": t,
-                    "content": content,
-                    "favicon": favicon_url,
-                    "word_counts": wc if wc > 1000 else 1000,
-                    "soup": soup
-                })
-            else:
-                break
+            retrieved_content.append(content)
+            successful_urls.append(url)
+            titles.append(t)
+            favicons.append(favicon_url)
+            # anchor word count at least 1000
+            word_counts.append(wc if wc > 1000 else 1000)
+            st.session_state['serp_contents'].append({
+                "position": idx + 1,      # 1-based SERP rank
+                "url": url,
+                "title": t,
+                "content": content,
+                "favicon": favicon_url,
+                "word_counts": wc if wc > 1000 else 1000,
+                "soup": soup
+            })
         time.sleep(0.5)
-        if len(retrieved_content) >= max_contents:
-            break
     progress.empty()
     status_placeholder.empty()  # Remove the last message after completion
-    
     # store brand names
     st.session_state['brands'] = list(brand_names)
 
@@ -986,7 +981,7 @@ def display_editor():
     ideal_word_count = st.session_state.get('ideal_word_count', None)
 
     # ---- NEW BUTTON to see SERP details ----
-    if st.button("Analyze SERP in Detail"):
+    if st.button("Analyze SERP in Detail", key='serp_details',type='secondary'):
         st.session_state['step'] = 'serp_details'
         st.rerun()
 

@@ -57,7 +57,7 @@ if "auth" not in st.session_state:
         access_token = result["token"]["access_token"]
         refresh_token = result["token"]["refresh_token"]
         st.session_state["token"] = result["token"]
-
+        st.session_state["auth"] = "success"
 else:
     st.write("You are logged in!")
     st.write(st.session_state["auth"])

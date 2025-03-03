@@ -3,6 +3,25 @@ import os
 from streamlit_oauth import OAuth2Component
 import base64
 import json
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+
+def connect_to_search_console(access_token, refresh_token, client_id, client_secret, scopes):
+    try:
+        creds = Credentials(token=access_token,
+                            refresh_token=refresh_token,
+                            token_uri='https://oauth2.googleapis.com/token',
+                            client_id=client_id,
+                            client_secret=client_secret,
+                            scopes=scopes)
+
+        service = build('searchconsole', 'v1', credentials=creds)
+        print("Successfully connected to Google Search Console API.")
+        return service
+
+    except Exception as e:
+        print(f"An error occurred during connection: {e}")
+        return None
 
 # import logging
 # logging.basicConfig(level=logging.INFO)
@@ -35,16 +54,10 @@ if "auth" not in st.session_state:
     if result:
         st.write(result)
         # decode the id_token jwt and get the user's email address
-        id_token = result["token"]["id_token"]
-        # verify the signature is an optional step for security
-        payload = id_token.split(".")[1]
-        # add padding to the payload if needed
-        payload += "=" * (-len(payload) % 4)
-        payload = json.loads(base64.b64decode(payload))
-        email = payload["email"]
-        st.session_state["auth"] = email
+        access_token = result["token"]["access_token"]
+        refresh_token = result["token"]["refresh_token"]
         st.session_state["token"] = result["token"]
-        st.rerun()
+
 else:
     st.write("You are logged in!")
     st.write(st.session_state["auth"])
@@ -52,3 +65,19 @@ else:
     if st.button("Logout"):
         del st.session_state["auth"]
         del st.session_state["token"]
+
+search_console_service = connect_to_search_console(access_token, refresh_token, CLIENT_ID, CLIENT_SECRET, SCOPES)
+
+if search_console_service:
+    st.success("Successfully connected to Google Search Console API!")
+
+    # --- Example: List your websites (web properties) ---
+    if st.button("List My Websites"):
+        try:
+            response = search_console_service.sites().list().execute()
+            st.write("\nYour Search Console Websites:")
+            if 'siteEntry' in response:
+                for site in response['siteEntry']:
+                    st.write(f"- {site['siteUrl']}")
+            else:
+                st.write("No websites found in your Search Console account.")

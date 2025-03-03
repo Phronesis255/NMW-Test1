@@ -79,7 +79,7 @@ if "token" in st.session_state:
         st.success("Successfully connected to Google Search Console API!")
 
         # --- Example: List your websites (web properties) ---
-        if st.button("List My Websites"):
+        if st.button("List My Websites", key="list_websites"):
             try:
                 response = search_console_service.sites().list().execute()
                 st.write("\nYour Search Console Websites:")
@@ -100,7 +100,7 @@ if "token" in st.session_state:
                 start_date = st.date_input("Start Date", value=pd.to_datetime('2025-01-01'))
                 end_date = st.date_input("End Date", value=pd.to_datetime('2025-03-01'))
 
-                if st.button(f"Get Query Data"):
+                if st.button(f"Get Query Data", key="get_query_data"):
                     st.write(f"Fetching query data...")
                     st.dialog("Fetching query data...")
                     try:

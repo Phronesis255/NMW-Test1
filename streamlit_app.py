@@ -81,3 +81,5 @@ if search_console_service:
                     st.write(f"- {site['siteUrl']}")
             else:
                 st.write("No websites found in your Search Console account.")
+        except Exception as e:
+            st.error(f"Error listing websites: {e}")

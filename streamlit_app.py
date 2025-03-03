@@ -85,7 +85,8 @@ if "token" in st.session_state:
                 st.write("\nYour Search Console Websites:")
                 if 'siteEntry' in response:
                     first_site = response['siteEntry'][0] # Get the first site
-                    site_url = first_site['siteUrl']                    
+                    site_url = first_site['siteUrl']
+                    st.session_state["site_url"] = first_site                                        
                     for site in response['siteEntry']:
                         st.write(f"- {site['siteUrl']}")
                 else:
@@ -93,8 +94,8 @@ if "token" in st.session_state:
                     st.write("No websites found in your Search Console account.")
             except Exception as e:
                 st.error(f"Error listing websites: {e}")
-                site_url = None
-            if site_url: # Only proceed if we have a site URL
+            if "site_url" in st.session_state:
+                site_url = st.session_state["site_url"]
                 # --- Date Range for Query Data ---
                 st.write(site_url)
                 start_date = st.date_input("Start Date", value=pd.to_datetime('2025-01-01'))
@@ -153,5 +154,7 @@ if "token" in st.session_state:
 
                     except Exception as e:
                         st.error(f"Error fetching query data: {e}")
+        else:
+            st.error("site not in session state")
     else:
         st.error("Failed to connect to Google Search Console API. Cannot fetch query data.")

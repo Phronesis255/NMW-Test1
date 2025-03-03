@@ -1,117 +1,54 @@
 import streamlit as st
-st.set_page_config(page_title="Needs More Words!", page_icon="🔠")
 import os
-from dotenv import load_dotenv
+from streamlit_oauth import OAuth2Component
+import base64
+import json
+
+# import logging
+# logging.basicConfig(level=logging.INFO)
+
+st.title("Google OIDC Example")
+st.write("This example shows how to use the raw OAuth2 component to authenticate with a Google OAuth2 and get email from id_token.")
+
+# create an OAuth2Component instance
+CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
+AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/auth"
+TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
 
 
-# 1) Load environment variables
-load_dotenv()
-
-
-# For st_login_form, you can specify them here OR rely on environment variables
-SUPABASE_URL = os.getenv("SUPABASE_URL")      # e.g. "https://<project>.supabase.co"
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
-SUPABASE_TABLE="users"
-
-
-# 2) Import st_login_form
-from st_login_form import login_form
-
-# 3) Your existing utilities
-from utils import perform_analysis, display_editor, display_serp_details
-
-def main_app():
-    """Main content after successful login."""
-    # Initialize session state variables
-    if 'analysis_completed' not in st.session_state:
-        st.session_state['analysis_completed'] = False
-    if 'step' not in st.session_state:
-        st.session_state['step'] = 'analysis'
-
-    with st.sidebar:
-        # Let users log out
-        if st.button("Log Out"):
-            st.session_state["authenticated"] = False
-            st.session_state["username"] = None
-            st.rerun()
-
-    st.title('Needs More Words! Optimize Your Content')
-
-    # Standard app flow
-    if st.session_state['step'] == 'analysis':
-        st.write("""
-        Welcome to the **Needs More Words** app!
-        Begin by entering a keyword to retrieve and analyze content.
-        """)
-        keyword = st.text_input('Enter a keyword:')
-        
-        if st.button('Start Analysis'):
-            if keyword:
-                st.session_state['keyword'] = keyword
-                perform_analysis(keyword)
-                st.session_state['analysis_completed'] = True
-                st.session_state['step'] = 'editor'
-                st.success("Analysis completed! Proceeding to the Content Editor.")
-                st.rerun()
-            else:
-                st.error('Please enter a keyword.')
-
-    elif st.session_state['step'] == 'editor':
-        if not st.session_state['analysis_completed']:
-            st.warning("Please perform the analysis first.")
-            st.session_state['step'] = 'analysis'
-            st.rerun()
-        else:
-            st.header('✍️ Content Editor')
-            display_editor()
-
-    elif st.session_state['step'] == 'serp_details':
-        # Our new step that shows detailed SERP analysis
-        display_serp_details()
-
-    else:
-        # Fallback to default
-        st.session_state['step'] = 'analysis'
+if "auth" not in st.session_state:
+    # create a button to start the OAuth2 flow
+    oauth2 = OAuth2Component(CLIENT_ID, CLIENT_SECRET, AUTHORIZE_ENDPOINT, TOKEN_ENDPOINT, TOKEN_ENDPOINT, REVOKE_ENDPOINT)
+    result = oauth2.authorize_button(
+        name="Continue with Google",
+        icon="https://www.google.com.tw/favicon.ico",
+        redirect_uri="https://needsmorewords.streamlit.app/component/streamlit_oauth.authorize_button",
+        scope="https://www.googleapis.com/auth/webmasters.readonly", #https://www.googleapis.com/auth/webmasters.readonly	
+        key="google",
+        extras_params={"prompt": "consent", "access_type": "offline"},
+        use_container_width=True,
+        pkce='S256',
+    )
+    
+    if result:
+        st.write(result)
+        # decode the id_token jwt and get the user's email address
+        id_token = result["token"]["id_token"]
+        # verify the signature is an optional step for security
+        payload = id_token.split(".")[1]
+        # add padding to the payload if needed
+        payload += "=" * (-len(payload) % 4)
+        payload = json.loads(base64.b64decode(payload))
+        email = payload["email"]
+        st.session_state["auth"] = email
+        st.session_state["token"] = result["token"]
         st.rerun()
-
-def main():
-    """
-    Entry point: Show the st_login_form if not authenticated.
-    Once authenticated, hide the login form and only show the welcome 
-    message once. Then display the main_app.
-    """
-    # 1) Initialize session keys if needed
-    if "authenticated" not in st.session_state:
-        st.session_state["authenticated"] = False
-        st.session_state["username"] = None
-
-    # 2) Only show the login form if not authenticated
-    if not st.session_state["authenticated"]:
-        # Show the login form
-        client = login_form()
-
-        # If login_form sets authenticated = True, immediately rerun
-        if st.session_state["authenticated"]:
-            st.rerun()
-    else:
-        # 3) Show the welcome message only once
-        if "welcome_shown" not in st.session_state:
-            if st.session_state["username"]:
-                st.success(f"Welcome {st.session_state['username']}!")
-                user_email = st.session_state["username"]
-            else:
-                st.success("Welcome, guest!")
-                user_email = "guest"
-            # Mark that we have shown the welcome message
-            st.session_state["welcome_shown"] = True
-
-        # 4) Then show the main app
-        main_app()
-
-# Run it!
-if __name__ == "__main__":
-    # If no session keys exist yet, init them
-    if "authenticated" not in st.session_state:
-        st.session_state["authenticated"] = False
-        st.session_state["username"] = None
-    main()
+else:
+    st.write("You are logged in!")
+    st.write(st.session_state["auth"])
+    st.write(st.session_state["token"])
+    if st.button("Logout"):
+        del st.session_state["auth"]
+        del st.session_state["token"]

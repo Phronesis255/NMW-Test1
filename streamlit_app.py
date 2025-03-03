@@ -99,6 +99,7 @@ if "token" in st.session_state:
                 end_date = '2025-03-01'   # March 1st, 2025
 
                 if st.button("Get Query Data for Jan 1, 2025 - Mar 1, 2025"):
+                    st.write(f"Fetching query data for {start_date} to {end_date}...")
                     try:
                         request = {
                             'startDate': start_date,
@@ -134,7 +135,6 @@ if "token" in st.session_state:
                             st.dataframe(df) # Display as Streamlit DataFrame
                         else:
                             st.warning("No query data to display.")
-
 
                     except Exception as e:
                         st.error(f"Error fetching query data: {e}")

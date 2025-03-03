@@ -66,20 +66,26 @@ else:
         del st.session_state["auth"]
         del st.session_state["token"]
 
-search_console_service = connect_to_search_console(access_token, refresh_token, CLIENT_ID, CLIENT_SECRET, SCOPES)
 
-if search_console_service:
-    st.success("Successfully connected to Google Search Console API!")
+if "token" in st.session_state:
+    token=st.session_state["token"]
+    access_token = token["access_token"]
+    refresh_token = token["refresh_token"]
+    SCOPES = ['https://www.googleapis.com/auth/webmasters.readonly']
 
-    # --- Example: List your websites (web properties) ---
-    if st.button("List My Websites"):
-        try:
-            response = search_console_service.sites().list().execute()
-            st.write("\nYour Search Console Websites:")
-            if 'siteEntry' in response:
-                for site in response['siteEntry']:
-                    st.write(f"- {site['siteUrl']}")
-            else:
-                st.write("No websites found in your Search Console account.")
-        except Exception as e:
-            st.error(f"Error listing websites: {e}")
+    search_console_service = connect_to_search_console(access_token, refresh_token, CLIENT_ID, CLIENT_SECRET, SCOPES)
+    if search_console_service:
+        st.success("Successfully connected to Google Search Console API!")
+
+        # --- Example: List your websites (web properties) ---
+        if st.button("List My Websites"):
+            try:
+                response = search_console_service.sites().list().execute()
+                st.write("\nYour Search Console Websites:")
+                if 'siteEntry' in response:
+                    for site in response['siteEntry']:
+                        st.write(f"- {site['siteUrl']}")
+                else:
+                    st.write("No websites found in your Search Console account.")
+            except Exception as e:
+                st.error(f"Error listing websites: {e}")

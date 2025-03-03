@@ -109,7 +109,8 @@ if "token" in st.session_state:
 
                         response = search_console_service.searchanalytics().query(
                             siteUrl=site_url, body=request).execute()
-
+                        st.write("\nQuery Data:")
+                        st.write(response)
                         query_data = []
                         if 'rows' in response:
                             for row in response['rows']:

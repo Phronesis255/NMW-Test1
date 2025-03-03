@@ -86,7 +86,7 @@ if "token" in st.session_state:
                 if 'siteEntry' in response:
                     first_site = response['siteEntry'][0] # Get the first site
                     site_url = first_site['siteUrl']
-                    st.session_state["site_url"] = first_site                                        
+                    st.session_state["site_url"] = first_site['siteUrl']
                     for site in response['siteEntry']:
                         st.write(f"- {site['siteUrl']}")
                 else:
@@ -95,7 +95,7 @@ if "token" in st.session_state:
             except Exception as e:
                 st.error(f"Error listing websites: {e}")
         if "site_url" in st.session_state:
-            site_url = st.session_state["site_url"]
+            site_url = st.session_state["site_url"]["siteUrl"]
             # --- Date Range for Query Data ---
             st.write(site_url)
             start_date = st.date_input("Start Date", value=pd.to_datetime('2025-01-01')).strftime('%Y-%m-%d')

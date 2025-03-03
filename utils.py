@@ -479,6 +479,7 @@ import pandas as pd
 from google.ads.googleads.client import GoogleAdsClient
 from google.oauth2 import service_account
 from math import ceil
+from textwrap import wrap
 
 def get_keyword_plan_data(
     keywords_list,

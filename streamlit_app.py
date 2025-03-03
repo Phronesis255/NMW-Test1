@@ -96,10 +96,10 @@ if "token" in st.session_state:
                 site_url = None
             if site_url: # Only proceed if we have a site URL
                 # --- Date Range for Query Data ---
-                start_date = '2025-01-01' # January 1st, 2025
-                end_date = '2025-03-01'   # March 1st, 2025
+                start_date = st.date_input("Start Date", value=pd.to_datetime('2025-01-01'))
+                end_date = st.date_input("End Date", value=pd.to_datetime('2025-03-01'))
 
-                if st.button("Get Query Data for Jan 1, 2025 - Mar 1, 2025"):
+                if st.button(f"Get Query Data for {start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')}"):
                     st.write(f"Fetching query data for {start_date} to {end_date}...")
                     try:
                         request = {
@@ -109,31 +109,43 @@ if "token" in st.session_state:
                             'searchType': 'web' # Default to web search
                         }
 
-                        response = search_console_service.searchanalytics().query(
-                            siteUrl=site_url, body=request).execute()
-                        st.write("\nQuery Data:")
-                        st.write(response)
                         query_data = []
-                        if 'rows' in response:
-                            for row in response['rows']:
-                                query = row['keys'][0] # Query is the first (and only) dimension
-                                clicks = row['clicks']
-                                impressions = row['impressions']
-                                ctr = row['ctr']
-                                position = row['position']
-                                query_data.append({
-                                    'Query': query,
-                                    'Clicks': clicks,
-                                    'Impressions': impressions,
-                                    'CTR': ctr,
-                                    'Position': position
-                                })
-                        else:
-                            st.info("No query data found for the selected date range and website.")
+                        request = {
+                            'startDate': start_date,
+                            'endDate': end_date,
+                            'dimensions': ['query'],
+                            'searchType': 'web' # Default to web search
+                        }
+                        while True:
+                            response = search_console_service.searchanalytics().query(
+                                siteUrl=site_url, body=request).execute()
+                            st.write("\nQuery Data:")
+                            st.write(response)
+                            if 'rows' in response:
+                                for row in response['rows']:
+                                    query = row['keys'][0] # Query is the first (and only) dimension
+                                    clicks = row['clicks']
+                                    impressions = row['impressions']
+                                    ctr = row['ctr']
+                                    position = row['position']
+                                    query_data.append({
+                                        'Query': query,
+                                        'Clicks': clicks,
+                                        'Impressions': impressions,
+                                        'CTR': ctr,
+                                        'Position': position
+                                    })
+                            else:
+                                st.info("No query data found for the selected date range and website.")
+                                break
+                            if 'nextPageToken' in response:
+                                request['pageToken'] = response['nextPageToken']
+                            else:
+                                break
 
                         if query_data:
                             df = pd.DataFrame(query_data)
-                            st.dataframe(df) # Display as Streamlit DataFrame
+                            st.dataframe(df.head(30)) # Display as Streamlit DataFrame
                         else:
                             st.warning("No query data to display.")
 

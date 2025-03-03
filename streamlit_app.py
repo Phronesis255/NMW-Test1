@@ -94,66 +94,66 @@ if "token" in st.session_state:
                     st.write("No websites found in your Search Console account.")
             except Exception as e:
                 st.error(f"Error listing websites: {e}")
-            if "site_url" in st.session_state:
-                site_url = st.session_state["site_url"]
-                # --- Date Range for Query Data ---
-                st.write(site_url)
-                start_date = st.date_input("Start Date", value=pd.to_datetime('2025-01-01'))
-                end_date = st.date_input("End Date", value=pd.to_datetime('2025-03-01'))
+        if "site_url" in st.session_state:
+            site_url = st.session_state["site_url"]
+            # --- Date Range for Query Data ---
+            st.write(site_url)
+            start_date = st.date_input("Start Date", value=pd.to_datetime('2025-01-01'))
+            end_date = st.date_input("End Date", value=pd.to_datetime('2025-03-01'))
 
-                if st.button(f"Get Query Data", key="get_query_data"):
-                    st.write(f"Fetching query data...")
-                    st.dialog("Fetching query data...")
-                    try:
-                        request = {
-                            'startDate': start_date,
-                            'endDate': end_date,
-                            'dimensions': ['query'],
-                            'searchType': 'web' # Default to web search
-                        }
+            if st.button(f"Get Query Data", key="get_query_data"):
+                st.write(f"Fetching query data...")
+                st.dialog("Fetching query data...")
+                try:
+                    request = {
+                        'startDate': start_date,
+                        'endDate': end_date,
+                        'dimensions': ['query'],
+                        'searchType': 'web' # Default to web search
+                    }
 
-                        query_data = []
-                        request = {
-                            'startDate': start_date,
-                            'endDate': end_date,
-                            'dimensions': ['query'],
-                            'searchType': 'web' # Default to web search
-                        }
-                        while True:
-                            response = search_console_service.searchanalytics().query(
-                                siteUrl=site_url, body=request).execute()
-                            st.write("\nQuery Data:")
-                            st.write(response)
-                            if 'rows' in response:
-                                for row in response['rows']:
-                                    query = row['keys'][0] # Query is the first (and only) dimension
-                                    clicks = row['clicks']
-                                    impressions = row['impressions']
-                                    ctr = row['ctr']
-                                    position = row['position']
-                                    query_data.append({
-                                        'Query': query,
-                                        'Clicks': clicks,
-                                        'Impressions': impressions,
-                                        'CTR': ctr,
-                                        'Position': position
-                                    })
-                            else:
-                                st.info("No query data found for the selected date range and website.")
-                                break
-                            if 'nextPageToken' in response:
-                                request['pageToken'] = response['nextPageToken']
-                            else:
-                                break
-
-                        if query_data:
-                            df = pd.DataFrame(query_data)
-                            st.dataframe(df.head(30)) # Display as Streamlit DataFrame
+                    query_data = []
+                    request = {
+                        'startDate': start_date,
+                        'endDate': end_date,
+                        'dimensions': ['query'],
+                        'searchType': 'web' # Default to web search
+                    }
+                    while True:
+                        response = search_console_service.searchanalytics().query(
+                            siteUrl=site_url, body=request).execute()
+                        st.write("\nQuery Data:")
+                        st.write(response)
+                        if 'rows' in response:
+                            for row in response['rows']:
+                                query = row['keys'][0] # Query is the first (and only) dimension
+                                clicks = row['clicks']
+                                impressions = row['impressions']
+                                ctr = row['ctr']
+                                position = row['position']
+                                query_data.append({
+                                    'Query': query,
+                                    'Clicks': clicks,
+                                    'Impressions': impressions,
+                                    'CTR': ctr,
+                                    'Position': position
+                                })
                         else:
-                            st.warning("No query data to display.")
+                            st.info("No query data found for the selected date range and website.")
+                            break
+                        if 'nextPageToken' in response:
+                            request['pageToken'] = response['nextPageToken']
+                        else:
+                            break
 
-                    except Exception as e:
-                        st.error(f"Error fetching query data: {e}")
+                    if query_data:
+                        df = pd.DataFrame(query_data)
+                        st.dataframe(df.head(30)) # Display as Streamlit DataFrame
+                    else:
+                        st.warning("No query data to display.")
+
+                except Exception as e:
+                    st.error(f"Error fetching query data: {e}")
         else:
             st.error("site not in session state")
     else:

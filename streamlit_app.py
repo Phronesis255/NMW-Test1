@@ -5,6 +5,7 @@ import base64
 import json
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+import pandas as pd
 
 def connect_to_search_console(access_token, refresh_token, client_id, client_secret, scopes):
     try:

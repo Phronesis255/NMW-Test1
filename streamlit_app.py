@@ -83,9 +83,59 @@ if "token" in st.session_state:
                 response = search_console_service.sites().list().execute()
                 st.write("\nYour Search Console Websites:")
                 if 'siteEntry' in response:
+                    first_site = response['siteEntry'][0] # Get the first site
+                    site_url = first_site['siteUrl']                    
                     for site in response['siteEntry']:
                         st.write(f"- {site['siteUrl']}")
                 else:
+                    site_url = None
                     st.write("No websites found in your Search Console account.")
             except Exception as e:
                 st.error(f"Error listing websites: {e}")
+                site_url = None
+            if site_url: # Only proceed if we have a site URL
+                # --- Date Range for Query Data ---
+                start_date = '2025-01-01' # January 1st, 2025
+                end_date = '2025-03-01'   # March 1st, 2025
+
+                if st.button("Get Query Data for Jan 1, 2025 - Mar 1, 2025"):
+                    try:
+                        request = {
+                            'startDate': start_date,
+                            'endDate': end_date,
+                            'dimensions': ['query'],
+                            'searchType': 'web' # Default to web search
+                        }
+
+                        response = search_console_service.searchanalytics().query(
+                            siteUrl=site_url, body=request).execute()
+
+                        query_data = []
+                        if 'rows' in response:
+                            for row in response['rows']:
+                                query = row['keys'][0] # Query is the first (and only) dimension
+                                clicks = row['clicks']
+                                impressions = row['impressions']
+                                ctr = row['ctr']
+                                position = row['position']
+                                query_data.append({
+                                    'Query': query,
+                                    'Clicks': clicks,
+                                    'Impressions': impressions,
+                                    'CTR': ctr,
+                                    'Position': position
+                                })
+                        else:
+                            st.info("No query data found for the selected date range and website.")
+
+                        if query_data:
+                            df = pd.DataFrame(query_data)
+                            st.dataframe(df) # Display as Streamlit DataFrame
+                        else:
+                            st.warning("No query data to display.")
+
+
+                    except Exception as e:
+                        st.error(f"Error fetching query data: {e}")
+    else:
+        st.error("Failed to connect to Google Search Console API. Cannot fetch query data.")

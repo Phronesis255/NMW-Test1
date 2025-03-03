@@ -96,11 +96,13 @@ if "token" in st.session_state:
                 site_url = None
             if site_url: # Only proceed if we have a site URL
                 # --- Date Range for Query Data ---
+                st.write(site_url)
                 start_date = st.date_input("Start Date", value=pd.to_datetime('2025-01-01'))
                 end_date = st.date_input("End Date", value=pd.to_datetime('2025-03-01'))
 
-                if st.button(f"Get Query Data for {start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')}"):
-                    st.write(f"Fetching query data for {start_date} to {end_date}...")
+                if st.button(f"Get Query Data"):
+                    st.write(f"Fetching query data...")
+                    st.dialog("Fetching query data...")
                     try:
                         request = {
                             'startDate': start_date,

@@ -98,8 +98,8 @@ if "token" in st.session_state:
             site_url = st.session_state["site_url"]
             # --- Date Range for Query Data ---
             st.write(site_url)
-            start_date = st.date_input("Start Date", value=pd.to_datetime('2025-01-01'))
-            end_date = st.date_input("End Date", value=pd.to_datetime('2025-03-01'))
+            start_date = st.date_input("Start Date", value=pd.to_datetime('2025-01-01')).strftime('%Y-%m-%d')
+            end_date = st.date_input("End Date", value=pd.to_datetime('2025-03-01')).strftime('%Y-%m-%d')
 
             if st.button(f"Get Query Data", key="get_query_data"):
                 st.write(f"Fetching query data...")

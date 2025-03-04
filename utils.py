@@ -30,6 +30,8 @@ from nltk.tokenize import sent_tokenize, word_tokenize
 from supabase import create_client, Client
 from transformers import pipeline
 torch.classes.__path__ = [] # add this line to manually set it to empty. 
+from google.oauth2 import service_account
+from google.ads.googleads.client import GoogleAdsClient
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -481,111 +483,62 @@ from google.oauth2 import service_account
 from math import ceil
 from textwrap import wrap
 
-def get_keyword_plan_data(
-    keywords_list,
-    key_file_path="path/to/your/service_account.json",
-    developer_token="your_developer_token",
-    login_customer_id="your_login_customer_id"
-):
-    """
-    Accepts a list of keywords and retrieves Google Keyword Planner data for them by automatically chunking the list into batches of up to 20 keywords each.
+def get_keyword_plan_data(keywords_list):
+    # 1) Read the JSON secret, replace newlines if needed
+    creds_json = st.secrets["GOOGLE_SERVICE_ACCOUNT_JSON_CONTENT"]
+    creds_json = creds_json.replace("\n", "\\n")  # ensure valid JSON
+    creds_dict = json.loads(creds_json)
+    
+    # 2) Create the service_account Credentials
+    credentials = service_account.Credentials.from_service_account_info(creds_dict)
+    
+    # 3) Instantiate the Google Ads client
+    client = GoogleAdsClient(
+        credentials=credentials,
+        developer_token="YOUR_DEVELOPER_TOKEN",
+        login_customer_id="YOUR_LOGIN_CUSTOMER_ID",
+    )
+    
+    st.write("Client successfully initialized")
 
-    Parameters
-    ----------
-    keywords_list : list of str
-        The list of keywords to send to the Google Keyword Planner.
-    key_file_path : str
-        Path to your Google service account JSON key file.
-    developer_token : str
-        Your Google Ads developer token.
-    login_customer_id : str
-        Your Google Ads customer ID (MCC if applicable).
+    # 4) Use the client
+    keyword_plan_idea_service = client.get_service("KeywordPlanIdeaService")
+    google_ads_service = client.get_service("GoogleAdsService")
 
-    Returns
-    -------
-    df_final : pandas.DataFrame
-        A DataFrame containing keyword text, avg monthly searches, and competition data for all provided keywords.
-    """
-    try:
-        # Initialize credentials
-        credentials = service_account.Credentials.from_service_account_file(key_file_path)
+    language_rn = google_ads_service.language_constant_path("1000")  # English
+    all_keyword_ideas = []
 
-        # Configuration dictionary for Google Ads API client
-        config = {
-            "developer_token": developer_token,
-            "use_proto_plus": True,
-            "json_key_file_path": key_file_path,
-        }
-        if login_customer_id:
-            config["login_customer_id"] = login_customer_id
+    # Basic chunking approach
+    CHUNK_SIZE = 20
+    num_chunks = ceil(len(keywords_list) / CHUNK_SIZE)
 
-        # Initialize the Google Ads client
-        client = GoogleAdsClient.load_from_dict(config_dict=config)
+    for i in range(num_chunks):
+        chunk = keywords_list[i*CHUNK_SIZE:(i+1)*CHUNK_SIZE]
+        request = client.get_type("GenerateKeywordIdeasRequest")
+        request.customer_id = "YOUR_LOGIN_CUSTOMER_ID"
+        request.language = language_rn
+        request.include_adult_keywords = False
+        request.keyword_plan_network = (
+            client.enums.KeywordPlanNetworkEnum.GOOGLE_SEARCH_AND_PARTNERS
+        )
+        request.keyword_seed.keywords.extend(chunk)
 
-        # The services we need
-        keyword_plan_idea_service = client.get_service("KeywordPlanIdeaService")
-        google_ads_service = client.get_service("GoogleAdsService")
+        keyword_ideas = keyword_plan_idea_service.generate_keyword_ideas(request=request)
+        for idea in keyword_ideas:
+            metrics = idea.keyword_idea_metrics
+            comp_enum = client.enums.KeywordPlanCompetitionLevelEnum.KeywordPlanCompetitionLevel
+            comp_label = comp_enum.Name(metrics.competition)
+            comp_index = getattr(metrics, "competition_index", 0)
 
-        # Define location and language targeting
-        location_ids = ["1023191"]  # Example: New York, NY
-        language_id = "1000"        # English
+            all_keyword_ideas.append({
+                "Keyword Text": idea.text,
+                "Average Monthly Searches": metrics.avg_monthly_searches or 0,
+                "Competition": comp_label,
+                "Competition Index": comp_index,
+            })
 
-        # Function to map location IDs to resource names
-        geo_target_constant_service = client.get_service("GeoTargetConstantService")
-        def map_locations_ids_to_resource_names(location_ids):
-            return [
-                geo_target_constant_service.geo_target_constant_path(location_id)
-                for location_id in location_ids
-            ]
-
-        location_rns = map_locations_ids_to_resource_names(location_ids)
-        language_rn = google_ads_service.language_constant_path(language_id)
-
-        # We'll collect results from each chunk in a list, then concatenate them
-        all_keyword_ideas = []
-
-        # Chunk the keywords into groups of up to 20
-        CHUNK_SIZE = 20
-        num_chunks = ceil(len(keywords_list) / CHUNK_SIZE)
-
-        for i in range(num_chunks):
-            start_idx = i * CHUNK_SIZE
-            end_idx = start_idx + CHUNK_SIZE
-            chunk = keywords_list[start_idx:end_idx]
-
-            # Prepare the GenerateKeywordIdeasRequest
-            request = client.get_type("GenerateKeywordIdeasRequest")
-            request.customer_id = login_customer_id
-            request.language = language_rn
-            # request.geo_target_constants.extend(location_rns)
-            request.include_adult_keywords = False
-            request.keyword_plan_network = (
-                client.enums.KeywordPlanNetworkEnum.GOOGLE_SEARCH_AND_PARTNERS
-            )
-
-            # Add the chunk of keywords for this request
-            request.keyword_seed.keywords.extend(chunk)
-
-            # Generate keyword ideas for this chunk
-            keyword_ideas = keyword_plan_idea_service.generate_keyword_ideas(request=request)
-
-            for idea in keyword_ideas:
-                competition_value = idea.keyword_idea_metrics.competition.name
-                avg_monthly_searches = idea.keyword_idea_metrics.avg_monthly_searches or 0
-                all_keyword_ideas.append({
-                    "Keyword Text": idea.text,
-                    "Average Monthly Searches": avg_monthly_searches,
-                    "Competition": competition_value
-                })
-
-        # Convert all results into a single DataFrame
-        df_final = pd.DataFrame(all_keyword_ideas).drop_duplicates().reset_index(drop=True)
-
-        return df_final
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return pd.DataFrame()  # Return empty DataFrame on error
+    df = pd.DataFrame(all_keyword_ideas).drop_duplicates().reset_index(drop=True)
+    return df
 
 def create_correlation_radar(target, pearson_corr, spearman_corr):
     """

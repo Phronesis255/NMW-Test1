@@ -20,7 +20,6 @@ typing
 torch
 sentence_transformers
 google-ads
-google_ads
 nltk
 torch
 transformers

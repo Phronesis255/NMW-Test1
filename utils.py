@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import textstat
 from nltk.tokenize import sent_tokenize, word_tokenize
-from supabase import create_client, Client, APIError
+from supabase import create_client, Client
 torch.classes.__path__ = [] # add this line to manually set it to empty. 
 from google.oauth2 import service_account
 from google.ads.googleads.client import GoogleAdsClient
@@ -1012,9 +1012,8 @@ def perform_analysis(keyword):
             "analysis_data": data_to_store['analysis_data']
         }).execute()
 
-    except APIError as e: #Exception?
+    except Exception as e: #Exception?
         st.error(f"Supabase insert failed: {e}")
-
     # else:
     inserted_rows = response.data
     if inserted_rows and len(inserted_rows) > 0:

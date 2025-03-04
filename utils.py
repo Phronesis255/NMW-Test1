@@ -990,36 +990,36 @@ def perform_analysis(keyword):
         }
         for i in range(len(top_terms))
     ]
-    data_to_store = {
-        "keyword": keyword,
-        "top_urls": top_urls,  # or successful_urls
-        "brand_names": list(brand_names),
-        "ideal_word_count": ideal_count,
-        # Combine your relevant data (like words_to_check, chart_data, etc.) in JSON
-        "analysis_data": {
-            "words_to_check": st.session_state['words_to_check'],
-            "chart_data": st.session_state['chart_data'].to_dict() if 'chart_data' in st.session_state else {},
-            # add more fields as needed...
-        },
-    }
-    try:
-        response = supabase.table("analysis_results").insert({
-            "user_email": user_email,
-            "keyword": keyword,
-            "top_urls": top_urls,
-            "brand_names": list(brand_names),
-            "ideal_word_count": ideal_count,
-            "analysis_data": data_to_store['analysis_data']
-        }).execute()
+    # data_to_store = {
+    #     "keyword": keyword,
+    #     "top_urls": top_urls,  # or successful_urls
+    #     "brand_names": list(brand_names),
+    #     "ideal_word_count": ideal_count,
+    #     # Combine your relevant data (like words_to_check, chart_data, etc.) in JSON
+    #     "analysis_data": {
+    #         "words_to_check": st.session_state['words_to_check'],
+    #         "chart_data": st.session_state['chart_data'].to_dict() if 'chart_data' in st.session_state else {},
+    #         # add more fields as needed...
+    #     },
+    # }
+    # try:
+    #     response = supabase.table("analysis_results").insert({
+    #         "user_email": user_email,
+    #         "keyword": keyword,
+    #         "top_urls": top_urls,
+    #         "brand_names": list(brand_names),
+    #         "ideal_word_count": ideal_count,
+    #         "analysis_data": data_to_store['analysis_data']
+    #     }).execute()
 
-    except Exception as e: #Exception?
-        st.error(f"Supabase insert failed: {e}")
-    # else:
-    inserted_rows = response.data
-    if inserted_rows and len(inserted_rows) > 0:
-        new_id = inserted_rows[0]["id"]
-        st.session_state["analysis_id"] = new_id
-        st.success(f"Saved analysis data with ID: {new_id}")
+    # except Exception as e: #Exception?
+    #     st.error(f"Supabase insert failed: {e}")
+    # # else:
+    # inserted_rows = response.data
+    # if inserted_rows and len(inserted_rows) > 0:
+    #     new_id = inserted_rows[0]["id"]
+    #     st.session_state["analysis_id"] = new_id
+    #     st.success(f"Saved analysis data with ID: {new_id}")
 
 
     st.session_state['analysis_completed'] = True

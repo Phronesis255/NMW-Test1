@@ -11,7 +11,8 @@ from bs4 import BeautifulSoup
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer, util
+from sentence_transformers import SentenceTransformer
+from transformers import pipeline
 import nltk
 import spacy
 import ssl
@@ -27,11 +28,11 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import textstat
 from nltk.tokenize import sent_tokenize, word_tokenize
-from supabase import create_client, Client
-from transformers import pipeline
+from supabase import create_client, Client, APIError
 torch.classes.__path__ = [] # add this line to manually set it to empty. 
 from google.oauth2 import service_account
 from google.ads.googleads.client import GoogleAdsClient
+import json
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -1011,7 +1012,7 @@ def perform_analysis(keyword):
             "analysis_data": data_to_store['analysis_data']
         }).execute()
 
-    except APIError as e:
+    except APIError as e: #Exception?
         st.error(f"Supabase insert failed: {e}")
 
     # else:

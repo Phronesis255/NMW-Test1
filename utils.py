@@ -496,8 +496,8 @@ def get_keyword_plan_data(keywords_list):
     # 3) Instantiate the Google Ads client
     client = GoogleAdsClient(
         credentials=credentials,
-        developer_token="YOUR_DEVELOPER_TOKEN",
-        login_customer_id="YOUR_LOGIN_CUSTOMER_ID",
+        developer_token="p2Of8yLD6yKNWn7NrtlR3g",
+        login_customer_id="8882181823",
     )
     
     st.write("Client successfully initialized")

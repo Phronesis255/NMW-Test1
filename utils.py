@@ -516,7 +516,7 @@ def get_keyword_plan_data(keywords_list):
     for i in range(num_chunks):
         chunk = keywords_list[i*CHUNK_SIZE:(i+1)*CHUNK_SIZE]
         request = client.get_type("GenerateKeywordIdeasRequest")
-        request.customer_id = "YOUR_LOGIN_CUSTOMER_ID"
+        request.customer_id = "8882181823"
         request.language = language_rn
         request.include_adult_keywords = False
         request.keyword_plan_network = (

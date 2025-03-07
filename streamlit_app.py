@@ -18,7 +18,7 @@ SUPABASE_TABLE="users"
 from st_login_form import login_form
 
 # 3) Your existing utilities
-from utils import perform_analysis, display_editor, display_serp_details
+from utils import perform_analysis, display_editor, display_serp_details, display_gsc_analysis
 
 def main_app():
     """Main content after successful login."""
@@ -35,13 +35,18 @@ def main_app():
             st.session_state["username"] = None
             st.rerun()
 
+        # We could add a sidebar button to jump to the GSC Analysis
+        if st.button("Go to GSC Analysis"):
+            st.session_state['step'] = 'gsc_analysis'
+            st.rerun()
+
     st.title('Needs More Words! Optimize Your Content')
 
     # Standard app flow
     if st.session_state['step'] == 'analysis':
         st.write("""
-        Welcome to the **Needs More Words** app!
-        Begin by entering a keyword to retrieve and analyze content.
+        Welcome to **Needs More Words**!
+        Begin by entering a keyword to retrieve and analyze content, or connect your GSC to analyze your existing content.
         """)
         keyword = st.text_input('Enter a keyword:')
         
@@ -68,6 +73,10 @@ def main_app():
     elif st.session_state['step'] == 'serp_details':
         # Our new step that shows detailed SERP analysis
         display_serp_details()
+
+    elif st.session_state['step'] == 'gsc_analysis':
+        # <--- NEW step for GSC analysis
+        display_gsc_analysis()
 
     else:
         # Fallback to default

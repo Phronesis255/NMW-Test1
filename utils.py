@@ -530,12 +530,17 @@ def get_keyword_plan_data(keywords_list):
             comp_enum = client.enums.KeywordPlanCompetitionLevelEnum.KeywordPlanCompetitionLevel
             comp_label = comp_enum.Name(metrics.competition)
             comp_index = getattr(metrics, "competition_index", 0)
-
+            kw = st.session_state['keyword']
+            model = load_embedding_model()
+            keyword_embedding = model.encode([kw])[0]
+            idea_embeddings = model.encode(idea.text)
+            similarity = cosine_similarity(keyword_embedding, idea_embeddings)[0]
             all_keyword_ideas.append({
                 "Keyword Text": idea.text,
                 "Average Monthly Searches": metrics.avg_monthly_searches or 0,
                 "Competition": comp_label,
                 "Competition Index": comp_index,
+                "Similarity to Keyword": similarity[0]
             })
 
     df = pd.DataFrame(all_keyword_ideas).drop_duplicates().reset_index(drop=True)
@@ -765,6 +770,184 @@ def display_serp_details():
     if st.button("Return to Editor"):
         st.session_state['step'] = 'editor'
         st.rerun()
+# streamlit_app.py (or a file that handles your app screens)
+from gscHelpers import connect_to_search_console, load_gsc_query_data
+from streamlit_oauth import OAuth2Component
+
+def display_gsc_analysis():
+    """
+    Renders a Streamlit screen for GSC authentication + data retrieval.
+    Call this from your main app flow when the user wants to analyze GSC data.
+    """
+    st.title("Google Search Console Analysis")
+
+    CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+    CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
+    AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/auth"
+    TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+    REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
+    SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
+
+    # OAuth logic
+    if "auth" not in st.session_state:
+        st.write("Not authenticated yet. Please log in via Google below:")
+        oauth2 = OAuth2Component(
+            CLIENT_ID, CLIENT_SECRET,
+            AUTHORIZE_ENDPOINT, TOKEN_ENDPOINT, TOKEN_ENDPOINT, REVOKE_ENDPOINT
+        )
+        result = oauth2.authorize_button(
+            name="Continue with Google",
+            icon="https://www.google.com.tw/favicon.ico",
+            redirect_uri="https://needsmorewords.streamlit.app/component/streamlit_oauth.authorize_button",
+            scope=" ".join(SCOPES),
+            key="google_oauth",
+            extras_params={"prompt": "consent", "access_type": "offline"},
+            use_container_width=True,
+            pkce='S256',
+        )
+
+        if result:
+            # Store tokens in session state
+            st.session_state["token"] = result["token"]
+            id_token = result["token"]["id_token"]
+            payload = id_token.split(".")[1]
+            payload += "=" * (-len(payload) % 4)
+            user_info = json.loads(base64.b64decode(payload))
+            email = user_info.get("email", "No email found")
+            st.session_state["auth"] = email
+            st.experimental_rerun()
+
+    else:
+        st.write(f"Logged in as: {st.session_state['auth']}")
+        if st.button("Logout"):
+            del st.session_state["auth"]
+            del st.session_state["token"]
+            st.experimental_rerun()
+
+        # Retrieve tokens from session
+        if "token" in st.session_state:
+            token = st.session_state["token"]
+            access_token = token["access_token"]
+            refresh_token = token.get("refresh_token", None)
+
+            # Connect to GSC
+            search_console_service = connect_to_search_console(
+                access_token, refresh_token,
+                CLIENT_ID, CLIENT_SECRET,
+                SCOPES
+            )
+
+            if search_console_service:
+                st.success("Connected to GSC! Now you can list your sites or query data.")
+                
+                # List Websites (i.e., site URL properties)
+                if st.button("List My Websites"):
+                    try:
+                        response = search_console_service.sites().list().execute()
+                        site_entries = response.get('siteEntry', [])
+                        if site_entries:
+                            st.write("Your GSC Websites:")
+                            for s in site_entries:
+                                st.write(f"• {s['siteUrl']}")
+
+                            # Optionally store the first site in session
+                            st.session_state["site_url"] = site_entries[0]['siteUrl']
+                        else:
+                            st.warning("No websites found in your Search Console account.")
+                    except Exception as e:
+                        st.error(f"Error listing websites: {e}")
+
+                # If a site is already chosen, let user pick date range & fetch queries
+                chosen_site = st.session_state.get("site_url", None)
+                if chosen_site:
+                    st.write(f"Selected site: {chosen_site}")
+
+                    # Date inputs
+                    start_date = st.date_input("Start Date", value=pd.to_datetime('2025-01-01'))
+                    end_date = st.date_input("End Date", value=pd.to_datetime('2025-03-01'))
+
+                    if st.button("Get Query Data"):
+                        df = load_gsc_query_data(
+                            service=search_console_service,
+                            site_url=chosen_site,
+                            start_date=start_date.strftime('%Y-%m-%d'),
+                            end_date=end_date.strftime('%Y-%m-%d')
+                        )
+                        if not df.empty:
+                            st.write("Query Data:")
+                            st.dataframe(df.head(30))
+                            # Maybe store the full DF in session_state
+                            df_gsc = df.copy()
+                            st.session_state["gsc_query_df"] = df_gsc
+                            st.subheader("Underperforming Keywords Analysis")
+
+                            # ----- (A) Basic aggregator approach -----
+                            # For demonstration, let's define a few bins for 'position'
+                            # and compute the average CTR for each bin as a reference:
+                            position_bins = [0, 1, 3, 6, 10, 100]
+                            bin_labels = ["pos1", "pos2-3", "pos4-6", "pos7-10", "pos10+"]
+                            df_gsc["position_bin"] = pd.cut(df_gsc["Position"], bins=position_bins, labels=bin_labels)
+                            bin_ctr = df_gsc.groupby("position_bin")["CTR"].mean()
+
+                            # Filter to queries with enough impressions to matter, e.g. >= 100
+                            df_filtered = df_gsc[df_gsc["Impressions"] >= 100].copy()
+
+                            def underperforming(row):
+                                """
+                                Mark a query as 'underperforming' if CTR < 50% of the bin's average CTR.
+                                """
+                                bin_label = row["position_bin"]
+                                if pd.isnull(bin_label):
+                                    return False
+                                baseline = bin_ctr.get(bin_label, np.nan)
+                                if np.isnan(baseline):
+                                    return False
+                                return row["CTR"] < 0.5 * baseline
+
+                            df_filtered["Is_Underperforming"] = df_filtered.apply(underperforming, axis=1)
+                            # Sort by Impressions descending
+                            df_underperf = df_filtered[df_filtered["Is_Underperforming"]].sort_values("Impressions", ascending=False)
+                            
+                            if not df_underperf.empty:
+                                st.markdown("""
+                                **Underperforming Keywords**: Queries with above-average impressions for their position,
+                                but CTR far below the norm. Consider rewriting title/meta snippet, or ensuring the
+                                content matches user intent.
+                                """)
+                                st.dataframe(df_underperf[["Query", "Impressions", "CTR", "Position", "position_bin"]])
+                            else:
+                                st.info("No underperforming queries found by this definition.")
+
+                            # Show a scatter plot: Position vs. CTR, bubble sized by Impressions
+                            st.markdown("### Position vs CTR (All Queries)")
+                            chart = alt.Chart(df_gsc).mark_circle().encode(
+                                x=alt.X("Position:Q", title="Position"),
+                                y=alt.Y("CTR:Q", title="CTR"),
+                                size=alt.Size("Impressions:Q", scale=alt.Scale(range=[10,400])),
+                                color=alt.condition(
+                                    alt.datum.Is_Underperforming == True,
+                                    alt.value("red"),
+                                    alt.value("blue")
+                                ),
+                                tooltip=["Query", "Impressions", "CTR", "Position"]
+                            ).properties(width=700, height=400).interactive()
+
+                            # The 'Is_Underperforming' column won't exist for queries outside the filter,
+                            # so let's fillna(False) before the chart:
+                            df_gsc = df_gsc.merge(df_filtered[["Query", "Is_Underperforming"]], on="Query", how="left")
+                            df_gsc["Is_Underperforming"] = df_gsc["Is_Underperforming"].fillna(False)
+                            
+                            st.altair_chart(chart, use_container_width=True)
+
+                            # ----- Return button -----
+                            if st.button("Return to Main"):
+                                st.session_state['step'] = 'analysis'
+                                st.rerun()
+
+                        else:
+                            st.warning("No query data was returned.")
+            else:
+                st.error("Failed to connect to GSC with given credentials.")
 
 
 def filter_terms(terms):
@@ -1297,58 +1480,56 @@ def display_editor():
         ax.axis("off")
         st.pyplot(fig)
         
-        from streamlit_oauth import OAuth2Component
-        import base64
-        import json
+        # from streamlit_oauth import OAuth2Component
 
-        # import logging
-        # logging.basicConfig(level=logging.INFO)
+        # # import logging
+        # # logging.basicConfig(level=logging.INFO)
 
-        st.title("Google OIDC Example")
-        st.write("This example shows how to use the raw OAuth2 component to authenticate with a Google OAuth2 and get email from id_token.")
+        # st.title("Google OIDC Example")
+        # st.write("This example shows how to use the raw OAuth2 component to authenticate with a Google OAuth2 and get email from id_token.")
 
-        # create an OAuth2Component instance
-        CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
-        CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
-        AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/auth"
-        TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-        REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
+        # # create an OAuth2Component instance
+        # CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+        # CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
+        # AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/auth"
+        # TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+        # REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
 
 
-        if "auth" not in st.session_state:
-            # create a button to start the OAuth2 flow
-            oauth2 = OAuth2Component(CLIENT_ID, CLIENT_SECRET, AUTHORIZE_ENDPOINT, TOKEN_ENDPOINT, TOKEN_ENDPOINT, REVOKE_ENDPOINT)
-            result = oauth2.authorize_button(
-                name="Continue with Google",
-                icon="https://www.google.com.tw/favicon.ico",
-                redirect_uri="https://needsmorewords.streamlit.app/component/streamlit_oauth.authorize_button",
-                scope="https://www.googleapis.com/auth/webmasters.readonly", #https://www.googleapis.com/auth/webmasters.readonly	
-                key="google",
-                extras_params={"prompt": "consent", "access_type": "offline"},
-                use_container_width=True,
-                pkce='S256',
-            )
+        # if "auth" not in st.session_state:
+        #     # create a button to start the OAuth2 flow
+        #     oauth2 = OAuth2Component(CLIENT_ID, CLIENT_SECRET, AUTHORIZE_ENDPOINT, TOKEN_ENDPOINT, TOKEN_ENDPOINT, REVOKE_ENDPOINT)
+        #     result = oauth2.authorize_button(
+        #         name="Continue with Google",
+        #         icon="https://www.google.com.tw/favicon.ico",
+        #         redirect_uri="https://needsmorewords.streamlit.app/component/streamlit_oauth.authorize_button",
+        #         scope="https://www.googleapis.com/auth/webmasters.readonly", #https://www.googleapis.com/auth/webmasters.readonly	
+        #         key="google",
+        #         extras_params={"prompt": "consent", "access_type": "offline"},
+        #         use_container_width=True,
+        #         pkce='S256',
+        #     )
             
-            if result:
-                st.write(result)
-                # decode the id_token jwt and get the user's email address
-                id_token = result["token"]["id_token"]
-                # verify the signature is an optional step for security
-                payload = id_token.split(".")[1]
-                # add padding to the payload if needed
-                payload += "=" * (-len(payload) % 4)
-                payload = json.loads(base64.b64decode(payload))
-                email = payload["email"]
-                st.session_state["auth"] = email
-                st.session_state["token"] = result["token"]
-                st.rerun()
-        else:
-            st.write("You are logged in!")
-            st.write(st.session_state["auth"])
-            st.write(st.session_state["token"])
-            if st.button("Logout"):
-                del st.session_state["auth"]
-                del st.session_state["token"]
+        #     if result:
+        #         st.write(result)
+        #         # decode the id_token jwt and get the user's email address
+        #         id_token = result["token"]["id_token"]
+        #         # verify the signature is an optional step for security
+        #         payload = id_token.split(".")[1]
+        #         # add padding to the payload if needed
+        #         payload += "=" * (-len(payload) % 4)
+        #         payload = json.loads(base64.b64decode(payload))
+        #         email = payload["email"]
+        #         st.session_state["auth"] = email
+        #         st.session_state["token"] = result["token"]
+        #         st.rerun()
+        # else:
+        #     st.write("You are logged in!")
+        #     st.write(st.session_state["auth"])
+        #     st.write(st.session_state["token"])
+        #     if st.button("Logout"):
+        #         del st.session_state["auth"]
+        #         del st.session_state["token"]
     else:
         st.markdown(f"Word Count: {word_count}")
     # ------------------------------------------------------------------

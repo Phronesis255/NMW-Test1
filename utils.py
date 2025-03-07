@@ -930,7 +930,7 @@ def display_gsc_analytics():
                                         df_underperf[["Query", "Impressions", "CTR", "Position", "position_bin"]],
                                         use_container_width=True,
                                         hide_index=True,
-                                        on_select="rerun",
+                                        # on_select="rerun",
                                         selection_mode="multi-row"
                                     )
                                     

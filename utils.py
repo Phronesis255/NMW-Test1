@@ -742,7 +742,7 @@ def display_serp_details():
         y=alt.Y("Average Usage:Q", title="Average POS Usage"),
         color=alt.Color("POS:N", title="Part of Speech"),
         tooltip=[alt.Tooltip("POS:N", title="Part of Speech"), alt.Tooltip("Average Usage:Q", title="Usage", format=".4f")]
-    ).properties(width=600, height=400)
+    ).properties(width=650, height=400)
     
     st.altair_chart(avg_pos_chart, use_container_width=True)
 
@@ -925,7 +925,6 @@ def display_gsc_analytics():
                     # Merge Is_Underperforming into df_gsc
                     df_gsc = df_gsc.merge(df_filtered[["Query", "Is_Underperforming"]], on="Query", how="left")
                     df_gsc["Is_Underperforming"] = df_gsc["Is_Underperforming"].fillna(False, downcast='infer')
-
                     # Sort by Impressions descending
                     df_underperf = df_filtered[df_filtered["Is_Underperforming"]].sort_values("Impressions", ascending=False)
                     

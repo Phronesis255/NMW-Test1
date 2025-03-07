@@ -486,7 +486,7 @@ from textwrap import wrap
 
 def get_keyword_plan_data(keywords_list):
     # 1) Read the JSON secret, replace newlines if needed
-    creds_json = st.session_state['creds_json']
+    creds_json = st.secrets["GOOGLE_SERVICE_ACCOUNT_JSON_CONTENT"]
     creds_json = creds_json.replace("\n", "\\n")  # ensure valid JSON
     creds_dict = json.loads(creds_json)
     
@@ -644,8 +644,8 @@ def extract_headings_for_paa_list(top_urls):
 def display_gsc_analytics():
     st.title("Google Search Console Analysis")
 
-    CLIENT_ID = st.session_state['CLIENT_ID']
-    CLIENT_SECRET = st.session_state['CLIENT_SECRET']
+    CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+    CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
     AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/auth"
     TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
     REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"

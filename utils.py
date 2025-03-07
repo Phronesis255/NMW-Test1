@@ -591,11 +591,15 @@ from google.oauth2 import service_account
 from math import ceil
 from textwrap import wrap
 
-def get_keyword_plan_data(keywords_list):
+def get_keyword_plan_data(keywords_list=None, url=None):
     # 1) Read the JSON secret, replace newlines if needed
     creds_json = st.secrets['GOOGLE_SERVICE_ACCOUNT_JSON_CONTENT']
     creds_json = creds_json.replace("\n", "\\n")  # ensure valid JSON
     creds_dict = json.loads(creds_json)
+
+    kw = st.session_state['keyword']
+    model = load_embedding_model()
+    keyword_embedding = model.encode([kw])[0]
     
     # 2) Create the service_account Credentials
     credentials = service_account.Credentials.from_service_account_info(creds_dict)
@@ -615,43 +619,71 @@ def get_keyword_plan_data(keywords_list):
 
     language_rn = google_ads_service.language_constant_path("1000")  # English
     all_keyword_ideas = []
-
-    # Basic chunking approach
-    CHUNK_SIZE = 20
-    num_chunks = ceil(len(keywords_list) / CHUNK_SIZE)
-
-    for i in range(num_chunks):
-        chunk = keywords_list[i*CHUNK_SIZE:(i+1)*CHUNK_SIZE]
-        request = client.get_type("GenerateKeywordIdeasRequest")
-        request.customer_id = "8882181823"
-        request.language = language_rn
-        request.include_adult_keywords = False
-        request.keyword_plan_network = (
-            client.enums.KeywordPlanNetworkEnum.GOOGLE_SEARCH_AND_PARTNERS
-        )
-        request.keyword_seed.keywords.extend(chunk)
-
+    if url and not keywords_list:
+        # Get keyword ideas from URL seed
+        request.url_seed.url = url
         keyword_ideas = keyword_plan_idea_service.generate_keyword_ideas(request=request)
-        for idea in keyword_ideas:
+        for idea in keyword_ideas.results:
+            if len(all_keyword_ideas) > 400:
+                break  # Changed from keyword_ideas.keyword_idea to keyword_ideas.results
             metrics = idea.keyword_idea_metrics
             comp_enum = client.enums.KeywordPlanCompetitionLevelEnum.KeywordPlanCompetitionLevel
             comp_label = comp_enum.Name(metrics.competition)
             comp_index = getattr(metrics, "competition_index", 0)
-            kw = st.session_state['keyword']
-            model = load_embedding_model()
-            keyword_embedding = model.encode([kw])[0]
+
             idea_embeddings = model.encode(idea.text)
             similarity = cosine_similarity(
                 keyword_embedding.reshape(1, -1),
                 idea_embeddings.reshape(1, -1)
             )[0][0]
+
             all_keyword_ideas.append({
                 "Keyword Text": idea.text,
                 "Average Monthly Searches": metrics.avg_monthly_searches or 0,
                 "Competition": comp_label,
                 "Competition Index": comp_index,
                 "Similarity to Keyword": similarity
+
             })
+
+    elif keywords_list:
+        # Basic chunking approach
+        CHUNK_SIZE = 20
+        num_chunks = ceil(len(keywords_list) / CHUNK_SIZE)
+
+        for i in range(num_chunks):
+            chunk = keywords_list[i*CHUNK_SIZE:(i+1)*CHUNK_SIZE]
+            request = client.get_type("GenerateKeywordIdeasRequest")
+            request.customer_id = "8882181823"
+            request.language = language_rn
+            request.include_adult_keywords = False
+            request.keyword_plan_network = (
+                client.enums.KeywordPlanNetworkEnum.GOOGLE_SEARCH_AND_PARTNERS
+            )
+            request.keyword_seed.keywords.extend(chunk)
+
+            keyword_ideas = keyword_plan_idea_service.generate_keyword_ideas(request=request)
+            for idea in keyword_ideas:
+                if len(all_keyword_ideas) > 400:
+                    break  # Changed from keyword_ideas.keyword_idea to keyword_ideas.results
+                
+                metrics = idea.keyword_idea_metrics
+                comp_enum = client.enums.KeywordPlanCompetitionLevelEnum.KeywordPlanCompetitionLevel
+                comp_label = comp_enum.Name(metrics.competition)
+                comp_index = getattr(metrics, "competition_index", 0)
+
+                idea_embeddings = model.encode(idea.text)
+                similarity = cosine_similarity(
+                    keyword_embedding.reshape(1, -1),
+                    idea_embeddings.reshape(1, -1)
+                )[0][0]
+                all_keyword_ideas.append({
+                    "Keyword Text": idea.text,
+                    "Average Monthly Searches": metrics.avg_monthly_searches or 0,
+                    "Competition": comp_label,
+                    "Competition Index": comp_index,
+                    "Similarity to Keyword": similarity
+                })
 
     df = pd.DataFrame(all_keyword_ideas).drop_duplicates().reset_index(drop=True)
     return df
@@ -1480,7 +1512,7 @@ def display_editor():
     st.subheader('Google Keyword Planner Data')
     if 'keyword' in st.session_state:
         keyword = st.session_state['keyword']
-        df_kw_ideas = get_keyword_plan_data([keyword])
+        df_kw_ideas = get_keyword_plan_data(keywords_list=[keyword], url=None)
         if not df_kw_ideas.empty:
             st.dataframe(df_kw_ideas)
         else:

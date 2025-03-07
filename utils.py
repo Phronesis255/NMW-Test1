@@ -1078,7 +1078,7 @@ def display_gsc_analytics():
                         embeddings = model.encode(df_gsc.head(300)['Query'].tolist())
 
                         # Perform clustering and visualization
-                        clustered_df = perform_kmeans_clustering(df_filtered.copy(), embeddings)
+                        clustered_df = perform_kmeans_clustering(df_gsc.head(300), embeddings)
 
                     else:
                         st.info("No underperforming queries found.")

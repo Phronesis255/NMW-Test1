@@ -897,7 +897,7 @@ def display_gsc_analytics():
                             # Filter to queries with enough impressions to matter, e.g. >= 100
                             df_filtered = df_gsc[df_gsc["Impressions"] >= 100].copy()
 
-                           def underperforming(row):
+                            def underperforming(row):
                                 """
                                 Mark a query as 'underperforming' if CTR < 50% of the bin's average CTR.
                                 """

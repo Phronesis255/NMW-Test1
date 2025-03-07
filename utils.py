@@ -920,7 +920,35 @@ def display_gsc_analytics():
                             
                             if not df_underperf.empty:
                                 st.write("Underperforming Queries (CTR < 50% of average for their position):")
-                                st.dataframe(df_underperf)
+
+                                # Add a selection column to the DataFrame
+                                df_underperf["Select"] = False
+
+                                # Use st.data_editor to allow users to select rows
+                                edited_df = st.data_editor(
+                                    df_underperf,
+                                    column_config={
+                                        "Select": st.column_config.CheckboxColumn(default=False),
+                                        "Query": st.column_config.TextColumn(disabled=True),
+                                        "Impressions": st.column_config.NumberColumn(disabled=True),
+                                        "CTR": st.column_config.NumberColumn(disabled=True),
+                                        "Position": st.column_config.NumberColumn(disabled=True),
+                                        "Is_Underperforming": st.column_config.CheckboxColumn(disabled=True),
+                                    },
+                                    hide_index=True,
+                                    use_container_width=True
+                                )
+
+                                # Get the selected queries
+                                selected_df = edited_df[edited_df["Select"]]
+
+                                # Display selected queries
+                                if not selected_df.empty:
+                                    st.write("### Selected Underperforming Queries")
+                                    st.dataframe(selected_df)
+                                else:
+                                    st.info("No queries selected.")
+
                             else:
                                 st.info("No underperforming queries found.")
 
@@ -947,7 +975,6 @@ def display_gsc_analytics():
                             if st.button("Return to Main"):
                                 st.session_state['step'] = 'analysis'
                                 st.rerun()
-
                         else:
                             st.warning("No query data was returned.")
             else:

@@ -543,7 +543,7 @@ def get_keyword_plan_data(keywords_list):
                 "Average Monthly Searches": metrics.avg_monthly_searches or 0,
                 "Competition": comp_label,
                 "Competition Index": comp_index,
-                "Similarity to Keyword": similarity[0]
+                "Similarity to Keyword": similarity
             })
 
     df = pd.DataFrame(all_keyword_ideas).drop_duplicates().reset_index(drop=True)

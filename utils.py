@@ -812,6 +812,7 @@ def display_gsc_analytics():
         if result:
             # Store tokens in session state
             st.session_state["token"] = result["token"]
+            st.write(result)
             id_token = result["token"]["id_token"]
             payload = id_token.split(".")[1]
             payload += "=" * (-len(payload) % 4)
@@ -1107,7 +1108,7 @@ def perform_analysis(keyword):
 
     lower_bound = (ideal_count // 500) * 500
     upper_bound = lower_bound + 500
-    st.info(f"**Suggested Word Count:** Aim for approx. {lower_bound}–{upper_bound} words based on top content.")
+    st.success(f"**Suggested Word Count:** Aim for approx. {lower_bound}–{upper_bound} words based on top content.")
 
     print("Starting TF-IDF operations")
 
@@ -1140,6 +1141,7 @@ def perform_analysis(keyword):
     avg_tf    /= avg_doc_len
 
     print("Generating embeddings...")
+    st.info("Indexing results... Generating embeddings...")
     # 7) Now compute similarity for each term to the user keyword
     keyword_emb = model.encode([keyword])[0]
     term_embeddings = model.encode(filtered_feature_names)

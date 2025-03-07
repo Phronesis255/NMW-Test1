@@ -534,7 +534,10 @@ def get_keyword_plan_data(keywords_list):
             model = load_embedding_model()
             keyword_embedding = model.encode([kw])[0]
             idea_embeddings = model.encode(idea.text)
-            similarity = cosine_similarity(keyword_embedding, idea_embeddings)[0]
+            similarity = cosine_similarity(
+                keyword_embedding.reshape(1, -1),
+                idea_embeddings.reshape(1, -1)
+            )[0][0]
             all_keyword_ideas.append({
                 "Keyword Text": idea.text,
                 "Average Monthly Searches": metrics.avg_monthly_searches or 0,

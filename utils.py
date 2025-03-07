@@ -33,9 +33,11 @@ torch.classes.__path__ = [] # add this line to manually set it to empty.
 from google.oauth2 import service_account
 from google.ads.googleads.client import GoogleAdsClient
 import json
+from sklearn.cluster import KMeans
+import plotly.express as px
+from sklearn.decomposition import PCA
 
 from dotenv import load_dotenv
-load_dotenv()
 
 load_dotenv()
 
@@ -191,6 +193,111 @@ def compute_text_stats_from_html(html_content: str):
 def load_embedding_model():
     return SentenceTransformer('all-MiniLM-L6-v2')
 
+def optimal_kmeans_clusters(embeddings, max_k=10):
+    """Find optimal number of clusters using elbow method"""
+    distortions = []
+    K = range(2, max_k+1)
+    for k in K:
+        kmean_model = KMeans(n_clusters=k, random_state=42, n_init=10)
+        kmean_model.fit(embeddings)
+        distortions.append(kmean_model.inertia_)
+    
+    # Calculate the optimal k using elbow point detection
+    deltas = np.diff(distortions)
+    optimal_k = np.argmax(deltas < 0.5 * deltas[0]) + 2  # +2 for 0-based index and range starts at 2
+    return optimal_k if optimal_k > 2 else 3
+
+def get_cluster_names(df, embeddings, n_clusters):
+    """Get representative cluster names using hybrid scoring"""
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    cluster_names = {}
+    
+    for cluster_id in range(n_clusters):
+        cluster_mask = df['Cluster'] == cluster_id
+        cluster_embeddings = embeddings[cluster_mask]
+        
+        # Calculate centroid
+        centroid = cluster_embeddings.mean(axis=0)
+        
+        # Hybrid scoring
+        scores = (
+            0.6 * cosine_similarity(cluster_embeddings, centroid.reshape(1, -1)).flatten() +
+            0.2 * df[cluster_mask]['Impressions'] / 
+                  df[cluster_mask]['Impressions'].max() +
+            0.2 * (1 - df[cluster_mask]['Position'] / 
+                         df[cluster_mask]['Position'].max())
+        )
+        
+        best_idx = scores.argmax()
+        cluster_names[cluster_id] = df[cluster_mask].iloc[best_idx]['Query']
+    
+    return cluster_names
+
+def perform_kmeans_clustering(df, embeddings):
+    """Perform KMeans clustering with interactive visualization"""
+    # Determine optimal cluster count
+    n_clusters = optimal_kmeans_clusters(embeddings)
+    
+    # Perform KMeans clustering
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    clusters = kmeans.fit_predict(embeddings)
+    df['Cluster'] = clusters
+    
+    # Reduce dimensions for visualization
+    pca = PCA(n_components=2)
+    embeddings_2d = pca.fit_transform(embeddings)
+    
+    # Get meaningful cluster names
+    cluster_names = get_cluster_names(df, embeddings, n_clusters)
+    df['Cluster Name'] = df['Cluster'].map(cluster_names)
+    
+    # Create interactive plot
+    fig = px.scatter(
+        df,
+        x=embeddings_2d[:, 0],
+        y=embeddings_2d[:, 1],
+        color='Cluster Name',
+        hover_name='Query',
+        hover_data={
+            'Cluster Name': True,
+            'Impressions': True,
+            'CTR': ':.2f',
+            'Position': True
+        },
+        title=f'Query Clusters (KMeans, {n_clusters} clusters)',
+        labels={'color': 'Cluster'},
+        color_discrete_sequence=px.colors.qualitative.Dark24
+    )
+    
+    # Enhance plot layout
+    fig.update_layout(
+        height=800,
+        width=1200,
+        hoverlabel=dict(
+            bgcolor="white",
+            font_size=12,
+            font_family="Arial"
+        )
+    )
+    
+    # Add cluster centers
+    centers = pca.transform(kmeans.cluster_centers_)
+    fig.add_trace(
+        go.Scatter(
+            x=centers[:, 0],
+            y=centers[:, 1],
+            mode='markers',
+            marker=dict(
+                color='black',
+                size=12,
+                symbol='x'
+            ),
+            name='Cluster Centers'
+        )
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    return df
 
 def google_custom_search(query, api_key, cse_id, num_results=10, delay=1):
     """Performs Google Custom Search with rate-limiting."""
@@ -918,6 +1025,8 @@ def display_gsc_analytics():
                         baseline = bin_ctr.get(bin_label, np.nan)
                         if np.isnan(baseline):
                             return False
+                        if row["Position"] > 25:
+                            return False
                         return row["CTR"] < 0.5 * baseline
 
                     df_filtered["Is_Underperforming"] = df_filtered.apply(underperforming, axis=1)
@@ -964,6 +1073,12 @@ def display_gsc_analytics():
                             use_container_width=True,
                             hide_index=True
                         )
+                        # Generate embeddings for clustering
+                        model = load_embedding_model()
+                        embeddings = model.encode(df_filtered['Query'].tolist())
+
+                        # Perform clustering and visualization
+                        clustered_df = perform_kmeans_clustering(df_filtered.copy(), embeddings)
 
                     else:
                         st.info("No underperforming queries found.")

@@ -783,8 +783,8 @@ from streamlit_oauth import OAuth2Component
 def display_gsc_analytics():
     st.title("Google Search Console Analysis")
 
-    CLIENT_ID = st.session_state['CLIENT_ID']
-    CLIENT_SECRET = st.session_state['CLIENT_SECRET']
+    CLIENT_ID = st.secrets['CLIENT_ID']
+    CLIENT_SECRET = st.secrets['CLIENT_SECRET']
     AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/auth"
     TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
     REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"

@@ -735,7 +735,7 @@ def display_serp_details():
     readability_bins = pd.cut(df["content_readability"], bins=[0, 5, 10, 15, 20, 25], labels=["0-5", "5-10", "10-15", "15-20", "20+"])
     df["readability_group"] = readability_bins
 
-    avg_pos_df = df.groupby("readability_group")[["adverbs", "adjectives", "verbs"]].mean().reset_index().melt(id_vars=["readability_group"], var_name="POS", value_name="Average Usage")
+    avg_pos_df = df.groupby("readability_group", observed=True)[["adverbs", "adjectives", "verbs"]].mean().reset_index().melt(id_vars=["readability_group"], var_name="POS", value_name="Average Usage")
 
     avg_pos_chart = alt.Chart(avg_pos_df).mark_bar().encode(
         x=alt.X("readability_group:N", title="Readability Score Range"),
@@ -903,7 +903,7 @@ def display_gsc_analytics():
                     position_bins = [0, 1, 3, 6, 10, 100]
                     bin_labels = ["pos1", "pos2-3", "pos4-6", "pos7-10", "pos10+"]
                     df_gsc["position_bin"] = pd.cut(df_gsc["Position"], bins=position_bins, labels=bin_labels)
-                    bin_ctr = df_gsc.groupby("position_bin")["CTR"].mean(observed=True)
+                    bin_ctr = df_gsc.groupby("position_bin", observed=True)["CTR"].mean()
 
                     # Filter to queries with enough impressions to matter, e.g. >= 100
                     df_filtered = df_gsc[df_gsc["Impressions"] >= 100].copy()

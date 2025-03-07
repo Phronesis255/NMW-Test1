@@ -13,6 +13,9 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")      # e.g. "https://<project>.supabase
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 SUPABASE_TABLE="users"
 
+st.session_state['CLIENT_ID'] = st.secrets["GOOGLE_CLIENT_ID"]
+st.session_state['CLIENT_SECRET'] = st.secrets["GOOGLE_CLIENT_SECRET"]
+st.session_state['creds_json'] = st.secrets["GOOGLE_SERVICE_ACCOUNT_JSON_CONTENT"]
 
 # 2) Import st_login_form
 from st_login_form import login_form

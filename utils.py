@@ -591,7 +591,7 @@ from google.oauth2 import service_account
 from math import ceil
 from textwrap import wrap
 
-def get_keyword_plan_data(keywords_list=None, url=None):
+def get_keyword_plan_data(keywords_list=None, url=None, seed_mode="KW"):
     # 1) Read the JSON secret, replace newlines if needed
     creds_json = st.secrets['GOOGLE_SERVICE_ACCOUNT_JSON_CONTENT']
     creds_json = creds_json.replace("\n", "\\n")  # ensure valid JSON
@@ -619,7 +619,7 @@ def get_keyword_plan_data(keywords_list=None, url=None):
 
     language_rn = google_ads_service.language_constant_path("1000")  # English
     all_keyword_ideas = []
-    if url and not keywords_list:
+    if seed_mode=="URL":
         # Get keyword ideas from URL seed
         request.url_seed.url = url
         keyword_ideas = keyword_plan_idea_service.generate_keyword_ideas(request=request)
@@ -646,7 +646,7 @@ def get_keyword_plan_data(keywords_list=None, url=None):
 
             })
 
-    elif keywords_list:
+    elif seed_mode=="KW":
         # Basic chunking approach
         CHUNK_SIZE = 20
         num_chunks = ceil(len(keywords_list) / CHUNK_SIZE)
@@ -684,7 +684,9 @@ def get_keyword_plan_data(keywords_list=None, url=None):
                     "Competition Index": comp_index,
                     "Similarity to Keyword": similarity
                 })
-
+    else:
+        st.error("Invalid seed mode selected.")
+        return None
     df = pd.DataFrame(all_keyword_ideas).drop_duplicates().reset_index(drop=True)
     return df
 

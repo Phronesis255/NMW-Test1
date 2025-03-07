@@ -774,7 +774,7 @@ def display_serp_details():
 from gscHelpers import connect_to_search_console, load_gsc_query_data
 from streamlit_oauth import OAuth2Component
 
-def display_gsc_analysis():
+def display_gsc_analytics():
     """
     Renders a Streamlit screen for GSC authentication + data retrieval.
     Call this from your main app flow when the user wants to analyze GSC data.

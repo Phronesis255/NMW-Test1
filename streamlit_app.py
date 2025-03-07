@@ -18,7 +18,7 @@ SUPABASE_TABLE="users"
 from st_login_form import login_form
 
 # 3) Your existing utilities
-from utils import perform_analysis, display_editor, display_serp_details, display_gsc_analysis
+from utils import perform_analysis, display_editor, display_serp_details, display_gsc_analytics
 
 def main_app():
     """Main content after successful login."""
@@ -76,7 +76,7 @@ def main_app():
 
     elif st.session_state['step'] == 'gsc_analysis':
         # <--- NEW step for GSC analysis
-        display_gsc_analysis()
+        display_gsc_analytics()
 
     else:
         # Fallback to default

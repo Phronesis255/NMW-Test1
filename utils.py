@@ -266,7 +266,7 @@ def perform_kmeans_clustering(df, embeddings):
         },
         title=f'Query Clusters (KMeans, {n_clusters} clusters)',
         labels={'color': 'Cluster'},
-        color_discrete_sequence=px.colors.qualitative.Prism,  # Use Prism color scale
+        color_discrete_sequence=px.colors.qualitative.G10,  # Use Prism color scale
     )
     
     # Enhance plot layout

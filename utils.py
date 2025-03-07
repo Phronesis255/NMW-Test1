@@ -792,8 +792,8 @@ def display_serp_details():
         st.warning("No SERP content available. Please run the analysis first.")
 
     # Extract headings for PAA list
-    if 'top_urls' in st.session_state:
-        extract_headings_for_paa_list(st.session_state['top_urls'])
+    if 'successful_urls' in st.session_state:
+        extract_headings_for_paa_list(st.session_state['successful_urls'])
 
     # 1) Process each SERP entry: extract detailed data and compute features
     features_list = []
@@ -809,6 +809,16 @@ def display_serp_details():
     df = pd.DataFrame(features_list)
     st.subheader("Computed Features for Each URL")
     st.dataframe(df)
+
+    # --- New Section: Google Keyword Planner API ---
+    st.subheader('Google Keyword Planner Data')
+    if 'keyword' in st.session_state:
+        keyword = st.session_state['keyword']
+        df_kw_ideas = get_keyword_plan_data(keywords_list=[keyword], url=None, seed_mode="KW")
+        if not df_kw_ideas.empty:
+            st.dataframe(df_kw_ideas)
+        else:
+            st.warning("No keyword data retrieved from Google Keyword Planner.")
 
     # 3) Visualize distributions for each numeric metric
     st.subheader("Distributions of Numeric Metrics")
@@ -1256,6 +1266,7 @@ def perform_analysis(keyword):
                 "soup": soup
             })
         time.sleep(0.5)
+    st.session_state['successful_urls'] = successful_urls
     progress.empty()
     status_placeholder.empty()  # Remove the last message after completion
     # store brand names
@@ -1509,16 +1520,6 @@ def display_editor():
         imported_keywords = pd.DataFrame()  # empty fallback
 
     combined_words_to_check = imported_words_to_check + words_to_check
-
-    # --- New Section: Google Keyword Planner API ---
-    st.subheader('Google Keyword Planner Data')
-    if 'keyword' in st.session_state:
-        keyword = st.session_state['keyword']
-        df_kw_ideas = get_keyword_plan_data(keywords_list=[keyword], url=None)
-        if not df_kw_ideas.empty:
-            st.dataframe(df_kw_ideas)
-        else:
-            st.warning("No keyword data retrieved from Google Keyword Planner.")
 
     if text_input_plain.strip():
         # Retrieve or build comparison_chart_data

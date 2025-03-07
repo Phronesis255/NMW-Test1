@@ -783,8 +783,8 @@ from streamlit_oauth import OAuth2Component
 def display_gsc_analytics():
     st.title("Google Search Console Analysis")
 
-    CLIENT_ID = st.secrets['CLIENT_ID']
-    CLIENT_SECRET = st.secrets['CLIENT_SECRET']
+    CLIENT_ID = st.session_state['CLIENT_ID']
+    CLIENT_SECRET = st.session_state['CLIENT_SECRET']
     AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/auth"
     TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
     REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
@@ -932,22 +932,39 @@ def display_gsc_analytics():
                     if not df_underperf.empty:
                         st.write("Underperforming Queries (CTR < 50% of average for their position):")
 
-                        # Display the DataFrame
-                        st.dataframe(df_underperf, use_container_width=True)
+                        # Define column configuration
+                        column_configuration = {
+                            "Query": st.column_config.TextColumn(disabled=True),
+                            "Impressions": st.column_config.NumberColumn(disabled=True),
+                            "CTR": st.column_config.NumberColumn(disabled=True),
+                            "Position": st.column_config.NumberColumn(disabled=True),
+                            "Is_Underperforming": st.column_config.CheckboxColumn(disabled=True),
+                        }
 
-                        # Add multiselect
-                        selected_queries = st.multiselect(
-                            "Select queries for further analysis:",
-                            df_underperf["Query"].tolist()
+                        # Display the DataFrame with multi-row selection
+                        event = st.dataframe(
+                            df_underperf,
+                            column_config=column_configuration,
+                            use_container_width=True,
+                            hide_index=True,
+                            on_select="rerun",
+                            selection_mode="multi-row",
                         )
 
-                        # Display selected queries
-                        if selected_queries:
-                            selected_df = df_underperf[df_underperf["Query"].isin(selected_queries)]
-                            st.write("### Selected Underperforming Queries")
-                            st.dataframe(selected_df, use_container_width=True)
-                        else:
-                            st.info("No queries selected.")
+                        # Get selected rows
+                        selected_rows = event.selection.rows
+
+                        # Filter the DataFrame based on selected rows
+                        filtered_df = df_underperf.iloc[selected_rows]
+
+                        # Display selected rows
+                        st.header("Selected Underperforming Queries")
+                        st.dataframe(
+                            filtered_df,
+                            column_config=column_configuration,
+                            use_container_width=True,
+                            hide_index=True
+                        )
 
                     else:
                         st.info("No underperforming queries found.")

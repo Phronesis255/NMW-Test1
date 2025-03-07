@@ -871,115 +871,143 @@ def display_gsc_analytics():
                     start_date = st.date_input("Start Date", value=pd.to_datetime('2025-01-01'))
                     end_date = st.date_input("End Date", value=pd.to_datetime('2025-03-01'))
 
-                    if st.button("Get Query Data"):
-                        df = load_gsc_query_data(
-                            service=search_console_service,
-                            site_url=chosen_site,
-                            start_date=start_date.strftime('%Y-%m-%d'),
-                            end_date=end_date.strftime('%Y-%m-%d')
-                        )
-                        if not df.empty:
-                            st.write("Query Data:")
-                            st.dataframe(df.head(30))
-                            # Maybe store the full DF in session_state
-                            df_gsc = df.copy()
-                            st.session_state["gsc_query_df"] = df_gsc
-                            st.subheader("Underperforming Keywords Analysis")
+                    # Check if GSC data is already in session state
+                    if "gsc_query_df" in st.session_state:
+                        df = st.session_state["gsc_query_df"]
+                        st.write("Using cached Query Data:")
+                    else:
+                        if st.button("Get Query Data"):
+                            # Clear the screen
+                            st.empty()
 
-                            # ----- (A) Basic aggregator approach -----
-                            # For demonstration, let's define a few bins for 'position'
-                            # and compute the average CTR for each bin as a reference:
-                            position_bins = [0, 1, 3, 6, 10, 100]
-                            bin_labels = ["pos1", "pos2-3", "pos4-6", "pos7-10", "pos10+"]
-                            df_gsc["position_bin"] = pd.cut(df_gsc["Position"], bins=position_bins, labels=bin_labels)
-                            bin_ctr = df_gsc.groupby("position_bin")["CTR"].mean()
-
-                            # Filter to queries with enough impressions to matter, e.g. >= 100
-                            df_filtered = df_gsc[df_gsc["Impressions"] >= 100].copy()
-
-                            def underperforming(row):
-                                """
-                                Mark a query as 'underperforming' if CTR < 50% of the bin's average CTR.
-                                """
-                                bin_label = row["position_bin"]
-                                if pd.isnull(bin_label):
-                                    return False
-                                baseline = bin_ctr.get(bin_label, np.nan)
-                                if np.isnan(baseline):
-                                    return False
-                                return row["CTR"] < 0.5 * baseline
-
-                            df_filtered["Is_Underperforming"] = df_filtered.apply(underperforming, axis=1)
-
-                            # Merge Is_Underperforming into df_gsc
-                            df_gsc = df_gsc.merge(df_filtered[["Query", "Is_Underperforming"]], on="Query", how="left")
-                            df_gsc["Is_Underperforming"] = df_gsc["Is_Underperforming"].fillna(False)
-
-                            # Sort by Impressions descending
-                            df_underperf = df_filtered[df_filtered["Is_Underperforming"]].sort_values("Impressions", ascending=False)
-                            
-                            if not df_underperf.empty:
-                                st.write("Underperforming Queries (CTR < 50% of average for their position):")
-
-                                # Add a selection column to the DataFrame
-                                df_underperf["Select"] = False
-
-                                # Use st.data_editor to allow users to select rows
-                                edited_df = st.data_editor(
-                                    df_underperf,
-                                    column_config={
-                                        "Select": st.column_config.CheckboxColumn(default=False),
-                                        "Query": st.column_config.TextColumn(disabled=True),
-                                        "Impressions": st.column_config.NumberColumn(disabled=True),
-                                        "CTR": st.column_config.NumberColumn(disabled=True),
-                                        "Position": st.column_config.NumberColumn(disabled=True),
-                                        "Is_Underperforming": st.column_config.CheckboxColumn(disabled=True),
-                                    },
-                                    hide_index=True,
-                                    use_container_width=True
-                                )
-
-                                # Get the selected queries
-                                selected_df = edited_df[edited_df["Select"]]
-
-                                # Display selected queries
-                                if not selected_df.empty:
-                                    st.write("### Selected Underperforming Queries")
-                                    st.dataframe(selected_df)
-                                else:
-                                    st.info("No queries selected.")
-
+                            df = load_gsc_query_data(
+                                service=search_console_service,
+                                site_url=chosen_site,
+                                start_date=start_date.strftime('%Y-%m-%d'),
+                                end_date=end_date.strftime('%Y-%m-%d')
+                            )
+                            if not df.empty:
+                                # Store the full DF in session_state
+                                st.session_state["gsc_query_df"] = df
                             else:
-                                st.info("No underperforming queries found.")
-
-                            # Show a scatter plot: Position vs. CTR, bubble sized by Impressions
-                            st.markdown("### Position vs CTR (All Queries)")
-
-                            # Create chart with modified color encoding
-                            chart = alt.Chart(df_gsc).mark_circle().encode(
-                                x=alt.X("Position:Q", title="Position"),
-                                y=alt.Y("CTR:Q", title="CTR"),
-                                size=alt.Size("Impressions:Q", scale=alt.Scale(range=[10,400])),
-                                color=alt.Color('Is_Underperforming:N',
-                                    scale=alt.Scale(
-                                        domain=[True, False],
-                                        range=['coral', 'teal']
-                                    )
-                                ),
-                                tooltip=["Query", "Impressions", "CTR", "Position", "Is_Underperforming"]
-                            ).properties(width=700, height=400).interactive()
-                            
-                            st.altair_chart(chart, use_container_width=True)
-
-                            # ----- Return button -----
-                            if st.button("Return to Main"):
-                                st.session_state['step'] = 'analysis'
-                                st.rerun()
+                                st.warning("No query data was returned.")
+                                return  # Exit if no data is returned
                         else:
-                            st.warning("No query data was returned.")
-            else:
-                st.error("Failed to connect to GSC with given credentials.")
+                            return  # Wait for the button to be pressed
 
+                    df_gsc = df.copy()
+                    st.subheader("Underperforming Keywords Analysis")
+
+                    # ----- (A) Basic aggregator approach -----
+                    # For demonstration, let's define a few bins for 'position'
+                    # and compute the average CTR for each bin as a reference:
+                    position_bins = [0, 1, 3, 6, 10, 100]
+                    bin_labels = ["pos1", "pos2-3", "pos4-6", "pos7-10", "pos10+"]
+                    df_gsc["position_bin"] = pd.cut(df_gsc["Position"], bins=position_bins, labels=bin_labels)
+                    bin_ctr = df_gsc.groupby("position_bin")["CTR"].mean()
+
+                    # Filter to queries with enough impressions to matter, e.g. >= 100
+                    df_filtered = df_gsc[df_gsc["Impressions"] >= 100].copy()
+
+                    def underperforming(row):
+                        """
+                        Mark a query as 'underperforming' if CTR < 50% of the bin's average CTR.
+                        """
+                        bin_label = row["position_bin"]
+                        if pd.isnull(bin_label):
+                            return False
+                        baseline = bin_ctr.get(bin_label, np.nan)
+                        if np.isnan(baseline):
+                            return False
+                        return row["CTR"] < 0.5 * baseline
+
+                    df_filtered["Is_Underperforming"] = df_filtered.apply(underperforming, axis=1)
+
+                    # Merge Is_Underperforming into df_gsc
+                    df_gsc = df_gsc.merge(df_filtered[["Query", "Is_Underperforming"]], on="Query", how="left")
+                    df_gsc["Is_Underperforming"] = df_gsc["Is_Underperforming"].fillna(False)
+
+                    # Sort by Impressions descending
+                    df_underperf = df_filtered[df_filtered["Is_Underperforming"]].sort_values("Impressions", ascending=False)
+                    
+                    if not df_underperf.empty:
+                        st.write("Underperforming Queries (CTR < 50% of average for their position):")
+
+                        # Add a selection column to the DataFrame
+                        df_underperf["Select"] = False
+
+                        # Use st.data_editor to allow users to select rows
+                        # Check if edited_df is already in session state
+                        if "edited_df" in st.session_state:
+                            edited_df = st.data_editor(
+                                st.session_state["edited_df"],
+                                column_config={
+                                    "Select": st.column_config.CheckboxColumn(default=False),
+                                    "Query": st.column_config.TextColumn(disabled=True),
+                                    "Impressions": st.column_config.NumberColumn(disabled=True),
+                                    "CTR": st.column_config.NumberColumn(disabled=True),
+                                    "Position": st.column_config.NumberColumn(disabled=True),
+                                    "Is_Underperforming": st.column_config.CheckboxColumn(disabled=True),
+                                },
+                                hide_index=True,
+                                use_container_width=True
+                            )
+                        else:
+                            edited_df = st.data_editor(
+                                df_underperf,
+                                column_config={
+                                    "Select": st.column_config.CheckboxColumn(default=False),
+                                    "Query": st.column_config.TextColumn(disabled=True),
+                                    "Impressions": st.column_config.NumberColumn(disabled=True),
+                                    "CTR": st.column_config.NumberColumn(disabled=True),
+                                    "Position": st.column_config.NumberColumn(disabled=True),
+                                    "Is_Underperforming": st.column_config.CheckboxColumn(disabled=True),
+                                },
+                                hide_index=True,
+                                use_container_width=True
+                            )
+
+                        # Store the edited_df in session state
+                        st.session_state["edited_df"] = edited_df
+
+                        # Get the selected queries
+                        selected_df = edited_df[edited_df["Select"]]
+
+                        # Display selected queries
+                        if not selected_df.empty:
+                            st.write("### Selected Underperforming Queries")
+                            st.dataframe(selected_df)
+                        else:
+                            st.info("No queries selected.")
+
+                    else:
+                        st.info("No underperforming queries found.")
+
+                    # Show a scatter plot: Position vs. CTR, bubble sized by Impressions
+                    st.markdown("### Position vs CTR (All Queries)")
+
+                    # Create chart with modified color encoding
+                    chart = alt.Chart(df_gsc).mark_circle().encode(
+                        x=alt.X("Position:Q", title="Position"),
+                        y=alt.Y("CTR:Q", title="CTR"),
+                        size=alt.Size("Impressions:Q", scale=alt.Scale(range=[10,400])),
+                        color=alt.Color('Is_Underperforming:N',
+                            scale=alt.Scale(
+                                domain=[True, False],
+                                range=['coral', 'teal']
+                            )
+                        ),
+                        tooltip=["Query", "Impressions", "CTR", "Position", "Is_Underperforming"]
+                    ).properties(width=700, height=400).interactive()
+                    
+                    st.altair_chart(chart, use_container_width=True)
+
+                    # ----- Return button -----
+                    if st.button("Return to Main"):
+                        st.session_state['step'] = 'analysis'
+                        st.rerun()
+                else:
+                    st.error("Failed to connect to GSC with given credentials.")
 
 def filter_terms(terms):
     """Filter out numeric, stopword, or other low-value tokens."""

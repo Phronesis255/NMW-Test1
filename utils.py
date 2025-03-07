@@ -919,55 +919,16 @@ def display_gsc_analytics():
                                 but CTR far below the norm. Consider rewriting title/meta snippet, or ensuring the
                                 content matches user intent.
                                 """)
-                                
-                                # Create tabs for selection and analysis
-                                select_tab, analyze_tab = st.tabs(["Select Keywords", "Analyze Selected"])
-                                
-                                with select_tab:
-                                    st.header("All Underperforming Keywords")
-                                    # Add selection capability to dataframe
-                                    selection = st.dataframe(
-                                        df_underperf[["Query", "Impressions", "CTR", "Position", "position_bin"]],
-                                        use_container_width=True,
-                                        hide_index=True,
-                                        # on_select="rerun",
-                                        selection_mode="multi-row"
-                                    )
-                                    
-                                    # Show selected keywords
-                                    st.header("Selected Keywords")
-                                    selected_rows = selection.selection.rows
-                                    filtered_df = df_underperf.iloc[selected_rows][["Query", "Impressions", "CTR", "Position"]]
-                                    st.dataframe(filtered_df, use_container_width=True)
-                                
-                                with analyze_tab:
-                                    if len(selected_rows) > 0:
-                                        st.header("CTR vs Position Analysis")
-                                        # Create comparison dataframe for selected keywords
-                                        comparison_df = df_underperf.iloc[selected_rows]
-                                        
-                                        # Create scatter plot of CTR vs Position for selected keywords
-                                        chart = alt.Chart(comparison_df).mark_circle(size=100).encode(
-                                            x=alt.X('Position:Q', title='Position'),
-                                            y=alt.Y('CTR:Q', title='CTR'),
-                                            size=alt.Size('Impressions:Q', legend=None),
-                                            tooltip=['Query', 'CTR', 'Position', 'Impressions']
-                                        ).properties(
-                                            width=600,
-                                            height=400
-                                        )
-                                        st.altair_chart(chart, use_container_width=True)
-                                        
-                                        # Show average metrics
-                                        st.subheader("Average Metrics for Selected Keywords")
-                                        avg_metrics = {
-                                            "Average CTR": comparison_df['CTR'].mean(),
-                                            "Average Position": comparison_df['Position'].mean(),
-                                            "Total Impressions": comparison_df['Impressions'].sum()
-                                        }
-                                        st.json(avg_metrics)
-                                    else:
-                                        st.markdown("No keywords selected for analysis.")
+                                selected_queries = st.multiselect(
+                                    "Select queries to analyze further:",
+                                    df_underperf["Query"].tolist()
+                                )
+                                st.dataframe(df_underperf[["Query", "Impressions", "CTR", "Position", "position_bin"]])
+
+                                if selected_queries:
+                                    selected_df = df_underperf[df_underperf["Query"].isin(selected_queries)]
+                                    st.markdown("### Selected Queries for Further Analysis")
+                                    st.dataframe(selected_df[["Query", "Impressions", "CTR", "Position", "position_bin"]])
                             else:
                                 st.info("No underperforming queries found by this definition.")
 

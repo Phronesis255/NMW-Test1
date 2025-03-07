@@ -486,7 +486,7 @@ from textwrap import wrap
 
 def get_keyword_plan_data(keywords_list):
     # 1) Read the JSON secret, replace newlines if needed
-    creds_json = st.secrets["GOOGLE_SERVICE_ACCOUNT_JSON_CONTENT"]
+    creds_json = st.secrets['GOOGLE_SERVICE_ACCOUNT_JSON_CONTENT']
     creds_json = creds_json.replace("\n", "\\n")  # ensure valid JSON
     creds_dict = json.loads(creds_json)
     
@@ -641,203 +641,139 @@ def extract_headings_for_paa_list(top_urls):
     else:
         st.session_state['paa_list'] = pd.DataFrame(columns=['Question','URL','Title'])
 
-def display_gsc_analytics():
-    st.title("Google Search Console Analysis")
 
-    CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
-    CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
-    AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/auth"
-    TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-    REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
-    SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
+def display_serp_details():
+    st.header("SERP Details")
+    st.write("Analyze the SERP in more detail.")
+    print("Displaying SERP Details")
+    # Safety check: ensure the analysis was run
+    if 'serp_contents' not in st.session_state or not st.session_state['serp_contents']:
+        st.warning("No SERP content available. Please run the analysis first.")
 
-    # OAuth logic
-    if "auth" not in st.session_state:
-        st.write("Not authenticated yet. Please log in via Google below:")
-        oauth2 = OAuth2Component(CLIENT_ID, CLIENT_SECRET, AUTHORIZE_ENDPOINT, TOKEN_ENDPOINT, TOKEN_ENDPOINT, REVOKE_ENDPOINT)
-        result = oauth2.authorize_button(
-            name="Continue with Google",
-            icon="https://www.google.com.tw/favicon.ico",
-            redirect_uri="https://needsmorewords.streamlit.app/component/streamlit_oauth.authorize_button",
-            scope="https://www.googleapis.com/auth/webmasters.readonly", #https://www.googleapis.com/auth/webmasters.readonly	
-            key="google",
-            extras_params={"prompt": "consent", "access_type": "offline"},
-            use_container_width=True,
-            pkce='S256',
+    # Extract headings for PAA list
+    if 'top_urls' in st.session_state:
+        extract_headings_for_paa_list(st.session_state['top_urls'])
+
+    # 1) Process each SERP entry: extract detailed data and compute features
+    features_list = []
+    serp_data = st.session_state['serp_contents']
+    for row in serp_data:
+        # Use the soup object and URL stored in each entry.
+        details = detailed_extraction(row['soup'], row['url'])
+        # Compute features for this SERP entry using its position.
+        feat = compute_serp_features(details, row['position'])
+        features_list.append(feat)
+
+    # 2) Create a DataFrame for analysis and display
+    df = pd.DataFrame(features_list)
+    st.subheader("Computed Features for Each URL")
+    st.dataframe(df)
+
+    # 3) Visualize distributions for each numeric metric
+    st.subheader("Distributions of Numeric Metrics")
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    for col in numeric_cols:
+        chart = alt.Chart(df).mark_bar().encode(
+            alt.X(f"{col}:Q", bin=alt.Bin(maxbins=15), title=col),
+            alt.Y("count()", title="Frequency")
+        ).properties(
+            width=300,
+            height=200,
+            title=f"Distribution of {col}"
         )
-        if result:
-            # Store tokens in session state
-            st.session_state["token"] = result["token"]
-            st.write(result)
-            if "id_token" in result["token"]:
-                id_token = result["token"]["id_token"]
-                payload = id_token.split(".")[1]
-                payload += "=" * (-len(payload) % 4)
-                user_info = json.loads(base64.b64decode(payload))
-                email = user_info.get("email", "No email found")
-            else:
-                id_token = result["token"]["access_token"]
-                email = "GSC@USER"
+        st.altair_chart(chart, use_container_width=True)
 
-            st.session_state["auth"] = email
-            st.rerun()
-
+    # 4) Display a correlation heatmap for the numeric features
+    st.subheader("Correlation Matrix Heatmap")
+    if numeric_cols:
+        corr = df[numeric_cols].corr().reset_index().melt("index")
+        chart_corr = alt.Chart(corr).mark_rect().encode(
+            x=alt.X("variable:N", title="Feature"),
+            y=alt.Y("index:N", title="Feature"),
+            color=alt.Color("value:Q", scale=alt.Scale(scheme="redblue", domain=(-1, 1))),
+            tooltip=["index", "variable", alt.Tooltip("value:Q", format=".2f")]
+        ).properties(width=500, height=500)
+        st.altair_chart(chart_corr, use_container_width=True)
     else:
-        st.write(f"Logged in")
-        if st.button("Logout"):
-            del st.session_state["auth"]
-            del st.session_state["token"]
-            st.rerun()
+        st.info("No numeric data available for correlation analysis.")
 
-        # Retrieve tokens from session
-        if "token" in st.session_state:
-            token = st.session_state["token"]
-            access_token = token["access_token"]
-            refresh_token = token.get("refresh_token", None)
+    # 5) Example scatter plot: Word Count vs. Content Readability
+    st.subheader("Scatter Plot: Word Count vs. Content Readability")
+    if "word_count" in df.columns and "content_readability" in df.columns:
+        scatter = alt.Chart(df).mark_circle(size=100).encode(
+            x=alt.X("word_count:Q", title="Word Count"),
+            y=alt.Y("content_readability:Q", title="Content Readability (Flesch-Kincaid Grade)"),
+            color=alt.Color("position:O", title="SERP Position", scale=alt.Scale(scheme="purplered")),
+            tooltip=[
+                alt.Tooltip("url:N", title="URL"),
+                alt.Tooltip("word_count:Q", title="Word Count"),
+                alt.Tooltip("content_readability:Q", title="Content Readability"),
+                alt.Tooltip("position:O", title="SERP Position")
+            ]
+        ).properties(width=500, height=400)
+        st.altair_chart(scatter, use_container_width=True)
 
-            # Connect to GSC
-            search_console_service = connect_to_search_console(
-                access_token, refresh_token,
-                CLIENT_ID, CLIENT_SECRET,
-                SCOPES
-            )
+    # POS Counts - Adverbs, Adjectives, Verbs
+    st.subheader("Parts of Speech (POS) Analysis")
 
-            if search_console_service:
-                st.success("Connected to GSC! Now you can list your sites or query data.")
-                
-                # List Websites (i.e., site URL properties)
-                if st.button("List My Websites"):
-                    try:
-                        response = search_console_service.sites().list().execute()
-                        site_entries = response.get('siteEntry', [])
-                        if site_entries:
-                            st.write("Your GSC Websites:")
-                            for s in site_entries:
-                                st.write(f"• {s['siteUrl']}")
+    pos_melted = df.melt(id_vars=["position"], value_vars=["adverbs", "adjectives", "verbs"],
+                            var_name="POS", value_name="Count")
 
-                            # Optionally store the first site in session
-                            st.session_state["site_url"] = site_entries[0]['siteUrl']
-                        else:
-                            st.warning("No websites found in your Search Console account.")
-                    except Exception as e:
-                        st.error(f"Error listing websites: {e}")
+    pos_chart = alt.Chart(pos_melted).mark_bar().encode(
+        x=alt.X("position:O", title="SERP Position"),
+        y=alt.Y("Count:Q", title="POS Count"),
+        color=alt.Color("POS:N", title="Part of Speech"),
+        tooltip=[alt.Tooltip("POS:N", title="Part of Speech"), alt.Tooltip("Count:Q", title="Count")]
+    ).properties(width=600, height=400)
+    
+    st.altair_chart(pos_chart, use_container_width=True)
+    st.subheader("Scatter Plots: POS Proportions vs. Readability")
 
-                # If a site is already chosen, let user pick date range & fetch queries
-                chosen_site = st.session_state.get("site_url", None)
-                if chosen_site:
-                    st.write(f"Selected site: {chosen_site}")
+    # 3) Grouped Bar Chart: Average POS Counts Across Readability Levels
+    st.subheader("Average POS Usage Across Readability Levels")
 
-                    # Date inputs
-                    start_date = st.date_input("Start Date", value=pd.to_datetime('2025-01-01'))
-                    end_date = st.date_input("End Date", value=pd.to_datetime('2025-03-01'))
+    readability_bins = pd.cut(df["content_readability"], bins=[0, 5, 10, 15, 20, 25], labels=["0-5", "5-10", "10-15", "15-20", "20+"])
+    df["readability_group"] = readability_bins
 
-                    # Check if GSC data is already in session state
-                    if "gsc_query_df" in st.session_state:
-                        df = st.session_state["gsc_query_df"]
-                        st.write("Using cached Query Data:")
-                    else:
-                        if st.button("Get Query Data"):
-                            # Clear the screen
-                            st.empty()
+    avg_pos_df = df.groupby("readability_group")[["adverbs", "adjectives", "verbs"]].mean().reset_index().melt(id_vars=["readability_group"], var_name="POS", value_name="Average Usage")
 
-                            df = load_gsc_query_data(
-                                service=search_console_service,
-                                site_url=chosen_site,
-                                start_date=start_date.strftime('%Y-%m-%d'),
-                                end_date=end_date.strftime('%Y-%m-%d')
-                            )
-                            if not df.empty:
-                                # Store the full DF in session_state
-                                st.session_state["gsc_query_df"] = df
-                            else:
-                                st.warning("No query data was returned.")
-                                return  # Exit if no data is returned
-                        else:
-                            return  # Wait for the button to be pressed
+    avg_pos_chart = alt.Chart(avg_pos_df).mark_bar().encode(
+        x=alt.X("readability_group:N", title="Readability Score Range"),
+        y=alt.Y("Average Usage:Q", title="Average POS Usage"),
+        color=alt.Color("POS:N", title="Part of Speech"),
+        tooltip=[alt.Tooltip("POS:N", title="Part of Speech"), alt.Tooltip("Average Usage:Q", title="Usage", format=".4f")]
+    ).properties(width=600, height=400)
+    
+    st.altair_chart(avg_pos_chart, use_container_width=True)
 
-                    df_gsc = df.copy()
-                    st.subheader("Underperforming Keywords Analysis")
+    # Compute similarity of questions to the keyword
+    if 'paa_list' in st.session_state and 'keyword' in st.session_state:
+        st.subheader("PAA Questions Similarity to Keyword")
+        paa_df = st.session_state['paa_list']
+        keyword = st.session_state['keyword']
+        model = load_embedding_model()
+        keyword_embedding = model.encode([keyword])[0]
+        paa_embeddings = model.encode(paa_df['Question'].tolist())
+        similarities = cosine_similarity([keyword_embedding], paa_embeddings)[0]
+        paa_df['Similarity'] = similarities
 
-                    # ----- (A) Basic aggregator approach -----
-                    # For demonstration, let's define a few bins for 'position'
-                    # and compute the average CTR for each bin as a reference:
-                    position_bins = [0, 1, 3, 6, 10, 100]
-                    bin_labels = ["pos1", "pos2-3", "pos4-6", "pos7-10", "pos10+"]
-                    df_gsc["position_bin"] = pd.cut(df_gsc["Position"], bins=position_bins, labels=bin_labels)
-                    bin_ctr = df_gsc.groupby("position_bin")["CTR"].mean()
+        # Filter out branded questions and questions with less than 4 words
+        paa_df = paa_df[paa_df['Question'].apply(is_not_branded)]
+        paa_df = paa_df[paa_df['Question'].apply(lambda x: len(x.split()) >= 4)]
+        
+        # Compute NER count for each question
+        paa_df['NER Count'] = paa_df['Question'].apply(compute_ner_count)
+        
+        # Filter out rows with similarity below 0.15 or NER count above 2
+        paa_df = paa_df[(paa_df['Similarity'] >= 0.18) & (paa_df['NER Count'] <= 2)]
+        
+        st.dataframe(paa_df[['Question', 'Similarity', 'NER Count']])
 
-                    # Filter to queries with enough impressions to matter, e.g. >= 100
-                    df_filtered = df_gsc[df_gsc["Impressions"] >= 100].copy()
+    # 6) Button to return to the Editor screen
+    if st.button("Return to Editor"):
+        st.session_state['step'] = 'editor'
+        st.rerun()
 
-                    def underperforming(row):
-                        """
-                        Mark a query as 'underperforming' if CTR < 50% of the bin's average CTR.
-                        """
-                        bin_label = row["position_bin"]
-                        if pd.isnull(bin_label):
-                            return False
-                        baseline = bin_ctr.get(bin_label, np.nan)
-                        if np.isnan(baseline):
-                            return False
-                        return row["CTR"] < 0.5 * baseline
-
-                    df_filtered["Is_Underperforming"] = df_filtered.apply(underperforming, axis=1)
-
-                    # Merge Is_Underperforming into df_gsc
-                    df_gsc = df_gsc.merge(df_filtered[["Query", "Is_Underperforming"]], on="Query", how="left")
-                    df_gsc["Is_Underperforming"] = df_gsc["Is_Underperforming"].fillna(False)
-
-                    # Sort by Impressions descending
-                    df_underperf = df_filtered[df_filtered["Is_Underperforming"]].sort_values("Impressions", ascending=False)
-                    
-                    if not df_underperf.empty:
-                        st.write("Underperforming Queries (CTR < 50% of average for their position):")
-
-                        # Display the DataFrame
-                        st.dataframe(df_underperf, use_container_width=True)
-
-                        # Add multiselect
-                        selected_queries = st.multiselect(
-                            "Select queries for further analysis:",
-                            df_underperf["Query"].tolist()
-                        )
-
-                        # Display selected queries
-                        if selected_queries:
-                            selected_df = df_underperf[df_underperf["Query"].isin(selected_queries)]
-                            st.write("### Selected Underperforming Queries")
-                            st.dataframe(selected_df, use_container_width=True)
-                        else:
-                            st.info("No queries selected.")
-
-                    else:
-                        st.info("No underperforming queries found.")
-
-                    # Show a scatter plot: Position vs. CTR, bubble sized by Impressions
-                    st.markdown("### Position vs CTR (All Queries)")
-
-                    # Create chart with modified color encoding
-                    chart = alt.Chart(df_gsc).mark_circle().encode(
-                        x=alt.X("Position:Q", title="Position"),
-                        y=alt.Y("CTR:Q", title="CTR"),
-                        size=alt.Size("Impressions:Q", scale=alt.Scale(range=[10,400])),
-                        color=alt.Color('Is_Underperforming:N',
-                            scale=alt.Scale(
-                                domain=[True, False],
-                                range=['coral', 'teal']
-                            )
-                        ),
-                        tooltip=["Query", "Impressions", "CTR", "Position", "Is_Underperforming"]
-                    ).properties(width=700, height=400).interactive()
-                    
-                    st.altair_chart(chart, use_container_width=True)
-
-                    # ----- Return button -----
-                    if st.button("Return to Main"):
-                        st.session_state['step'] = 'analysis'
-                        st.rerun()
-                else:
-                    st.error("Failed to connect to GSC with given credentials.")
 
 
 # streamlit_app.py (or a file that handles your app screens)
@@ -851,8 +787,8 @@ def display_gsc_analytics():
     """
     st.title("Google Search Console Analysis")
 
-    CLIENT_ID = st.session_state['CLIENT_ID']
-    CLIENT_SECRET = st.session_state['CLIENT_SECRET']
+    CLIENT_ID = st.secrets['CLIENT_ID']
+    CLIENT_SECRET = st.secrets['CLIENT_SECRET']
     AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/auth"
     TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
     REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"

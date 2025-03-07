@@ -919,25 +919,80 @@ def display_gsc_analytics():
                                 but CTR far below the norm. Consider rewriting title/meta snippet, or ensuring the
                                 content matches user intent.
                                 """)
-                                st.dataframe(df_underperf[["Query", "Impressions", "CTR", "Position", "position_bin"]])
+                                
+                                # Create tabs for selection and analysis
+                                select_tab, analyze_tab = st.tabs(["Select Keywords", "Analyze Selected"])
+                                
+                                with select_tab:
+                                    st.header("All Underperforming Keywords")
+                                    # Add selection capability to dataframe
+                                    selection = st.dataframe(
+                                        df_underperf[["Query", "Impressions", "CTR", "Position", "position_bin"]],
+                                        use_container_width=True,
+                                        hide_index=True,
+                                        on_select="rerun",
+                                        selection_mode="multi-row"
+                                    )
+                                    
+                                    # Show selected keywords
+                                    st.header("Selected Keywords")
+                                    selected_rows = selection.selection.rows
+                                    filtered_df = df_underperf.iloc[selected_rows][["Query", "Impressions", "CTR", "Position"]]
+                                    st.dataframe(filtered_df, use_container_width=True)
+                                
+                                with analyze_tab:
+                                    if len(selected_rows) > 0:
+                                        st.header("CTR vs Position Analysis")
+                                        # Create comparison dataframe for selected keywords
+                                        comparison_df = df_underperf.iloc[selected_rows]
+                                        
+                                        # Create scatter plot of CTR vs Position for selected keywords
+                                        chart = alt.Chart(comparison_df).mark_circle(size=100).encode(
+                                            x=alt.X('Position:Q', title='Position'),
+                                            y=alt.Y('CTR:Q', title='CTR'),
+                                            size=alt.Size('Impressions:Q', legend=None),
+                                            tooltip=['Query', 'CTR', 'Position', 'Impressions']
+                                        ).properties(
+                                            width=600,
+                                            height=400
+                                        )
+                                        st.altair_chart(chart, use_container_width=True)
+                                        
+                                        # Show average metrics
+                                        st.subheader("Average Metrics for Selected Keywords")
+                                        avg_metrics = {
+                                            "Average CTR": comparison_df['CTR'].mean(),
+                                            "Average Position": comparison_df['Position'].mean(),
+                                            "Total Impressions": comparison_df['Impressions'].sum()
+                                        }
+                                        st.json(avg_metrics)
+                                    else:
+                                        st.markdown("No keywords selected for analysis.")
                             else:
                                 st.info("No underperforming queries found by this definition.")
 
                             # Show a scatter plot: Position vs. CTR, bubble sized by Impressions
                             st.markdown("### Position vs CTR (All Queries)")
+                            # Ensure df_gsc has Is_Underperforming column properly set
+                            df_gsc['Is_Underperforming'] = df_gsc['Query'].map(
+                                df_filtered.set_index('Query')['Is_Underperforming']
+                            ).fillna(False)
+                            
+                            # Create chart with modified color encoding
                             chart = alt.Chart(df_gsc).mark_circle().encode(
                                 x=alt.X("Position:Q", title="Position"),
                                 y=alt.Y("CTR:Q", title="CTR"),
                                 size=alt.Size("Impressions:Q", scale=alt.Scale(range=[10,400])),
-                                color=alt.condition(
-                                    alt.datum.Is_Underperforming == True,
-                                    alt.value("red"),
-                                    alt.value("blue")
+                                color=alt.Color('Is_Underperforming:N',
+                                    scale=alt.Scale(
+                                        domain=[True, False],
+                                        range=['coral', 'teal']
+                                    )
                                 ),
-                                tooltip=["Query", "Impressions", "CTR", "Position"]
+                                tooltip=["Query", "Impressions", "CTR", "Position", "Is_Underperforming"]
                             ).properties(width=700, height=400).interactive()
 
-                            # The 'Is_Underperforming' column won't exist for queries outside the filter,
+                            # The 'Is_Underperforming' column is now properly set for all queries,
                             # so let's fillna(False) before the chart:
                             df_gsc = df_gsc.merge(df_filtered[["Query", "Is_Underperforming"]], on="Query", how="left")
                             df_gsc["Is_Underperforming"] = df_gsc["Is_Underperforming"].fillna(False)

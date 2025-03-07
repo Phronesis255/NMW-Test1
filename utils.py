@@ -1075,7 +1075,7 @@ def display_gsc_analytics():
                         )
                         # Generate embeddings for clustering
                         model = load_embedding_model()
-                        embeddings = model.encode(df_filtered['Query'].tolist())
+                        embeddings = model.encode(df_gsc.head(300)['Query'].tolist())
 
                         # Perform clustering and visualization
                         clustered_df = perform_kmeans_clustering(df_filtered.copy(), embeddings)

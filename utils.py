@@ -919,16 +919,7 @@ def display_gsc_analytics():
                                 but CTR far below the norm. Consider rewriting title/meta snippet, or ensuring the
                                 content matches user intent.
                                 """)
-                                selected_queries = st.multiselect(
-                                    "Select queries to analyze further:",
-                                    df_underperf["Query"].tolist()
-                                )
                                 st.dataframe(df_underperf[["Query", "Impressions", "CTR", "Position", "position_bin"]])
-
-                                if selected_queries:
-                                    selected_df = df_underperf[df_underperf["Query"].isin(selected_queries)]
-                                    st.markdown("### Selected Queries for Further Analysis")
-                                    st.dataframe(selected_df[["Query", "Impressions", "CTR", "Position", "position_bin"]])
                             else:
                                 st.info("No underperforming queries found by this definition.")
 

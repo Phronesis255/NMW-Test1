@@ -926,6 +926,8 @@ def display_gsc_analytics():
                             # Show a scatter plot: Position vs. CTR, bubble sized by Impressions
                             st.markdown("### Position vs CTR (All Queries)")
                             # Ensure df_gsc has Is_Underperforming column properly set
+                            if 'Is_Underperforming' not in df_gsc.columns:
+                                df_gsc['Is_Underperforming'] = False
                             df_gsc['Is_Underperforming'] = df_gsc['Query'].map(
                                 df_filtered.set_index('Query')['Is_Underperforming']
                             ).fillna(False)

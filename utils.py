@@ -809,20 +809,25 @@ def display_gsc_analytics():
             # Store tokens in session state
             st.session_state["token"] = result["token"]
             st.write(result)
-            id_token = result["token"]["id_token"]
-            payload = id_token.split(".")[1]
-            payload += "=" * (-len(payload) % 4)
-            user_info = json.loads(base64.b64decode(payload))
-            email = user_info.get("email", "No email found")
+            if "id_token" in result["token"]:
+                id_token = result["token"]["id_token"]
+                payload = id_token.split(".")[1]
+                payload += "=" * (-len(payload) % 4)
+                user_info = json.loads(base64.b64decode(payload))
+                email = user_info.get("email", "No email found")
+            else:
+                id_token = result["token"]["access_token"]
+                email = "GSC@USER"
+
             st.session_state["auth"] = email
-            st.experimental_rerun()
+            st.rerun()
 
     else:
-        st.write(f"Logged in as: {st.session_state['auth']}")
+        st.write(f"Logged in")
         if st.button("Logout"):
             del st.session_state["auth"]
             del st.session_state["token"]
-            st.experimental_rerun()
+            st.rerun()
 
         # Retrieve tokens from session
         if "token" in st.session_state:

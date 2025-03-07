@@ -897,7 +897,7 @@ def display_gsc_analytics():
                             # Filter to queries with enough impressions to matter, e.g. >= 100
                             df_filtered = df_gsc[df_gsc["Impressions"] >= 100].copy()
 
-                            def underperforming(row):
+                           def underperforming(row):
                                 """
                                 Mark a query as 'underperforming' if CTR < 50% of the bin's average CTR.
                                 """
@@ -910,28 +910,23 @@ def display_gsc_analytics():
                                 return row["CTR"] < 0.5 * baseline
 
                             df_filtered["Is_Underperforming"] = df_filtered.apply(underperforming, axis=1)
+
+                            # Merge Is_Underperforming into df_gsc
+                            df_gsc = df_gsc.merge(df_filtered[["Query", "Is_Underperforming"]], on="Query", how="left")
+                            df_gsc["Is_Underperforming"] = df_gsc["Is_Underperforming"].fillna(False)
+
                             # Sort by Impressions descending
                             df_underperf = df_filtered[df_filtered["Is_Underperforming"]].sort_values("Impressions", ascending=False)
                             
                             if not df_underperf.empty:
-                                st.markdown("""
-                                **Underperforming Keywords**: Queries with above-average impressions for their position,
-                                but CTR far below the norm. Consider rewriting title/meta snippet, or ensuring the
-                                content matches user intent.
-                                """)
-                                st.dataframe(df_underperf[["Query", "Impressions", "CTR", "Position", "position_bin"]])
+                                st.write("Underperforming Queries (CTR < 50% of average for their position):")
+                                st.dataframe(df_underperf)
                             else:
-                                st.info("No underperforming queries found by this definition.")
+                                st.info("No underperforming queries found.")
 
                             # Show a scatter plot: Position vs. CTR, bubble sized by Impressions
                             st.markdown("### Position vs CTR (All Queries)")
-                            # Ensure df_gsc has Is_Underperforming column properly set
-                            if 'Is_Underperforming' not in df_gsc.columns:
-                                df_gsc['Is_Underperforming'] = False
-                            df_gsc['Is_Underperforming'] = df_gsc['Query'].map(
-                                df_filtered.set_index('Query')['Is_Underperforming']
-                            ).fillna(False)
-                            
+
                             # Create chart with modified color encoding
                             chart = alt.Chart(df_gsc).mark_circle().encode(
                                 x=alt.X("Position:Q", title="Position"),
@@ -945,11 +940,6 @@ def display_gsc_analytics():
                                 ),
                                 tooltip=["Query", "Impressions", "CTR", "Position", "Is_Underperforming"]
                             ).properties(width=700, height=400).interactive()
-
-                            # The 'Is_Underperforming' column is now properly set for all queries,
-                            # so let's fillna(False) before the chart:
-                            df_gsc = df_gsc.merge(df_filtered[["Query", "Is_Underperforming"]], on="Query", how="left")
-                            df_gsc["Is_Underperforming"] = df_gsc["Is_Underperforming"].fillna(False)
                             
                             st.altair_chart(chart, use_container_width=True)
 

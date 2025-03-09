@@ -29,16 +29,17 @@ def main_app():
         st.session_state['step'] = 'analysis'
 
     with st.sidebar:
-        # Let users log out
-        if st.button("Log Out"):
-            st.session_state["authenticated"] = False
-            st.session_state["username"] = None
-            st.rerun()
+        with st.expander("Navigation", icon="🔍"):
+            # Let users log out
+            if st.button("Log Out"):
+                st.session_state["authenticated"] = False
+                st.session_state["username"] = None
+                st.rerun()
 
-        # We could add a sidebar button to jump to the GSC Analysis
-        if st.button("Go to GSC Analysis"):
-            st.session_state['step'] = 'gsc_analysis'
-            st.rerun()
+            # We could add a sidebar button to jump to the GSC Analysis
+            if st.button("Go to GSC Analysis"):
+                st.session_state['step'] = 'gsc_analysis'
+                st.rerun()
 
     st.title('Needs More Words! Optimize Your Content')
 

@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import requests
 import base64
+import math
 import re
 from typing import Optional, Any
 import streamlit as st
@@ -623,7 +624,7 @@ def get_keyword_plan_data(keywords_list=None, url=None, seed_mode="KW"):
         # Get keyword ideas from URL seed
         request.url_seed.url = url
         keyword_ideas = keyword_plan_idea_service.generate_keyword_ideas(request=request)
-        for idea in keyword_ideas.results:
+        for idx, idea in keyword_ideas.results:
             if len(all_keyword_ideas) > 400:
                 break  # Changed from keyword_ideas.keyword_idea to keyword_ideas.results
             metrics = idea.keyword_idea_metrics
@@ -642,9 +643,22 @@ def get_keyword_plan_data(keywords_list=None, url=None, seed_mode="KW"):
                 "Average Monthly Searches": metrics.avg_monthly_searches or 0,
                 "Competition": comp_label,
                 "Competition Index": comp_index,
-                "Similarity to Keyword": similarity
-
+                "Similarity to Keyword": similarity,
+                "Word Count": len(idea.text.split()),
+                "Position": idx + 1,
             })
+        # Calculate max_avg_monthly_searches before the loop
+        max_avg_monthly_searches = max((idea["Average Monthly Searches"] for idea in all_keyword_ideas), default=1)  # Avoid division by zero
+
+        for idea in all_keyword_ideas:
+            # Ensure "Average Monthly Searches" is not None before division
+            avg_monthly_searches = idea["Average Monthly Searches"] if idea["Average Monthly Searches"] is not None else 0
+
+            idea["Total Score"] = (
+            0.1 * avg_monthly_searches / max_avg_monthly_searches +
+            0.4 * idea["Similarity to Keyword"] +
+            0.5 * (1 - math.sqrt(idea["Position"] / len(all_keyword_ideas)))
+            )
 
     elif seed_mode=="KW":
         # Basic chunking approach

@@ -1132,11 +1132,102 @@ def display_gsc_analytics():
                             hide_index=True
                         )
                         # Generate embeddings for clustering
-                        model = load_embedding_model()
-                        embeddings = model.encode(df_gsc.head(300)['Query'].tolist())
+                        # model = load_embedding_model()
+                        # embeddings = model.encode(df_gsc.head(300)['Query'].tolist())
 
-                        # Perform clustering and visualization
-                        clustered_df = perform_kmeans_clustering(df_gsc.head(300), embeddings)
+                        # # Perform clustering and visualization
+                        # clustered_df = perform_kmeans_clustering(df_gsc.head(300), embeddings)
+                        st.header("Cannibalized Queries Analysis")
+                        dimensions_query_page = ["query", "page"]
+                        query_page_df = load_gsc_query_data(
+                                service=search_console_service,
+                                site_url=chosen_site,
+                                start_date=start_date.strftime('%Y-%m-%d'),
+                                end_date=end_date.strftime('%Y-%m-%d'),
+                                dimensions=dimensions_query_page
+                            )
+
+                        if not query_page_df.empty:
+                            st.subheader("Raw Data with Query and Page Dimensions")
+                            st.dataframe(query_page_df)
+                            
+                            # Analyze for cannibalized queries
+                            st.subheader("Analyzing for Cannibalized Queries...")
+                            query_page_grouped = query_page_df.groupby('Query')['Page'].nunique().reset_index()
+                            query_page_grouped.columns = ['Query', 'Unique_Page_Count']
+                            cannibalized_queries_df = query_page_grouped[query_page_grouped['Unique_Page_Count'] > 1]
+
+                            if not cannibalized_queries_df.empty:
+                                st.success(f"Found {len(cannibalized_queries_df)} cannibalized queries.")
+                                st.subheader("Cannibalized Queries")
+                                st.dataframe(cannibalized_queries_df)
+
+                                # Merge cannibalized queries with original data to get metrics
+                                cannibalized_queries_metrics_df = pd.merge(
+                                    cannibalized_queries_df[['Query']],
+                                    query_page_df,
+                                    on='Query',
+                                    how='inner'
+                                )
+
+                                st.subheader("Performance Metrics for Cannibalized Queries")
+                                st.dataframe(cannibalized_queries_metrics_df)
+
+                                # --- Visualizations ---
+                                st.subheader("Visualizations")
+
+                                # 1. Bar chart of number of cannibalized queries
+                                fig_cannibalized_count = px.bar(
+                                    x=['Cannibalized Queries', 'Non-Cannibalized Queries'],
+                                    y=[len(cannibalized_queries_df), len(query_page_grouped) - len(cannibalized_queries_df)],
+                                    title="Number of Cannibalized vs. Non-Cannibalized Queries",
+                                    labels={'y': 'Number of Queries', 'x': 'Query Type'}
+                                )
+                                st.plotly_chart(fig_cannibalized_count)
+
+                                # 2. Table of cannibalized queries and their page counts (already displayed as dataframe)
+
+                                # 3. Performance metrics summary for cannibalized queries
+                                cannibalized_summary_metrics = cannibalized_queries_metrics_df[[ 'Clicks', 'Impressions', 'CTR', 'Position']].mean().reset_index()
+                                cannibalized_summary_metrics.columns = ['Metric', 'Average Value']
+
+                                all_queries_summary_metrics = query_page_df[[ 'Clicks', 'Impressions', 'CTR', 'Position']].mean().reset_index()
+                                all_queries_summary_metrics.columns = ['Metric', 'Average Value']
+
+                                summary_metrics_comparison = pd.DataFrame({
+                                    'Metric': all_queries_summary_metrics['Metric'],
+                                    'All Queries': all_queries_summary_metrics['Average Value'].round(2),
+                                    'Cannibalized Queries': cannibalized_summary_metrics['Average Value'].round(2) if not cannibalized_summary_metrics.empty else [0,0,0,0]
+                                })
+
+                                st.subheader("Comparison of Average Performance Metrics")
+                                st.dataframe(summary_metrics_comparison)
+
+                                # 4. Distribution of unique page counts per query
+                                fig_page_count_distribution = px.histogram(
+                                    query_page_grouped,
+                                    x='Unique_Page_Count',
+                                    title="Distribution of Unique Page Counts per Query",
+                                    labels={'Unique_Page_Count': 'Number of Unique Pages'}
+                                )
+                                st.plotly_chart(fig_page_count_distribution)
+
+
+                                st.subheader("Detailed List of Cannibalized Queries and Pages")
+                                expanded_cannibalized_data = pd.merge(
+                                    cannibalized_queries_df['Query'],
+                                    query_page_df,
+                                    on='Query',
+                                    how='inner'
+                                )
+                                st.dataframe(expanded_cannibalized_data)
+
+
+                            else:
+                                st.info("No cannibalized queries found in the selected date range.")
+
+                        else:
+                            st.info("No query data found for the selected date range.")
 
                     else:
                         st.info("No underperforming queries found.")

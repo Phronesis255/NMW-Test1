@@ -1138,7 +1138,7 @@ def display_gsc_analytics():
                         # # Perform clustering and visualization
                         # clustered_df = perform_kmeans_clustering(df_gsc.head(300), embeddings)
                         st.header("Cannibalized Queries Analysis")
-                        dimensions_query_page = ["page", "device"]
+                        dimensions_query_page = ["page"]
                         query_page_df = load_gsc_query_data(
                                 service=search_console_service,
                                 site_url=chosen_site,
@@ -1150,7 +1150,7 @@ def display_gsc_analytics():
                         if not query_page_df.empty:
                             st.subheader("Raw Data with Query and Page Dimensions")
                             st.dataframe(query_page_df)
-                            
+                            st.write(query_page_df.columns)
                             # Analyze for cannibalized queries
                             st.subheader("Analyzing for Cannibalized Queries...")
                             query_page_grouped = query_page_df.groupby('Query')['Page'].nunique().reset_index()

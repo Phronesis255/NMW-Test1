@@ -1138,7 +1138,7 @@ def display_gsc_analytics():
                         # # Perform clustering and visualization
                         # clustered_df = perform_kmeans_clustering(df_gsc.head(300), embeddings)
                         st.header("Cannibalized Queries Analysis")
-                        dimensions_query_page = ["query", "page"]
+                        dimensions_query_page = ["page", "device"]
                         query_page_df = load_gsc_query_data(
                                 service=search_console_service,
                                 site_url=chosen_site,

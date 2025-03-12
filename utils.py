@@ -950,12 +950,18 @@ def display_gsc_analytics():
 
     if 'CLIENT_ID' in st.secrets:
         CLIENT_ID = st.secrets['CLIENT_ID']
-    else:
+    elif 'GCS_CLIENT_ID2' in st.secrets:
         CLIENT_ID = st.secrets['GCS_CLIENT_ID2']
+    else:
+        st.error("No Google Search Console client ID found.")
+        return
     if 'CLIENT_SECRET' in st.secrets:
         CLIENT_SECRET = st.secrets['CLIENT_SECRET']
-    else:
+    elif 'GCS_CLIENT_SECRET' in st.secrets:
         CLIENT_SECRET = st.secrets['GCS_CLIENT_SECRET2']
+    else:
+        st.error("No Google Search Console client secrets found.")
+        return
     AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/auth"
     TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
     REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"

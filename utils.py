@@ -1157,20 +1157,38 @@ def display_gsc_analytics():
                             st.subheader("Raw Data with Query and Page Dimensions")
                             st.dataframe(query_page_df)
                             st.write(query_page_df.columns)
-                            # Analyze for cannibalized queries
-                            st.subheader("Analyzing for Cannibalized Queries...")
-                            query_page_grouped = query_page_df.groupby('Query')['Page'].nunique().reset_index()
+                            page_urls = query_page_df['Query'].unique()
+                            for page_url in page_urls:
+                                st.write(f"Fetching data for page: {page_url}")
+                                dimensions_query = ["query"] # We only need 'query' dimension now, page is filtered
+                                query_df = load_gsc_query_data(
+                                    service=search_console_service,
+                                    site_url=chosen_site,
+                                    start_date=start_date.strftime('%Y-%m-%d'),
+                                    end_date=end_date.strftime('%Y-%m-%d'),
+                                    dimensions=dimensions_query
+                                )
+                                if not query_df.empty:
+                                    all_query_page_data = pd.concat([all_query_page_data, query_df]) # Append page data to the combined DataFrame
+                                else:
+                                    st.info(f"No data returned for page: {page_url}")
+
+                        if not all_query_page_data.empty:
+                            st.subheader("Raw Data (Page-by-Page Queries)")
+                            st.dataframe(all_query_page_data)
+
+                            # Identify cannibalized queries (queries associated with multiple pages)
+                            query_page_grouped = all_query_page_data.groupby('Query')['Page'].nunique().reset_index()
                             query_page_grouped.columns = ['Query', 'Unique_Page_Count']
                             cannibalized_queries_df = query_page_grouped[query_page_grouped['Unique_Page_Count'] > 1]
 
                             if not cannibalized_queries_df.empty:
-                                st.success(f"Found {len(cannibalized_queries_df)} cannibalized queries.")
                                 st.subheader("Cannibalized Queries")
                                 st.dataframe(cannibalized_queries_df)
 
-                                # Merge cannibalized queries with original data to get metrics
+                                # Merge cannibalized queries with original data to get performance metrics
                                 cannibalized_queries_metrics_df = pd.merge(
-                                    cannibalized_queries_df[['Query']],
+                                    cannibalized_queries_df['Query'],
                                     query_page_df,
                                     on='Query',
                                     how='inner'
@@ -1227,7 +1245,6 @@ def display_gsc_analytics():
                                     how='inner'
                                 )
                                 st.dataframe(expanded_cannibalized_data)
-
 
                             else:
                                 st.info("No cannibalized queries found in the selected date range.")

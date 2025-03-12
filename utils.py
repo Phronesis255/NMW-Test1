@@ -1166,7 +1166,8 @@ def display_gsc_analytics():
                             page_urls = query_page_df['Query'].unique()
                             all_query_page_data = pd.DataFrame()
                             for page_url in page_urls:
-                                st.write(f"Fetching data for page: {page_url}")
+                                info_placeholder = st.empty()  # Create a placeholder
+                                info_placeholder.info(f"Fetching data for page: {page_url}")
                                 dimensions_query = ["query"] # We only need 'query' dimension now, page is filtered
                                 query_df = load_gsc_query_data(
                                     service=search_console_service,
@@ -1175,6 +1176,9 @@ def display_gsc_analytics():
                                     end_date=end_date.strftime('%Y-%m-%d'),
                                     dimensions=dimensions_query
                                 )
+                                time.sleep(1)
+                                info_placeholder.empty()  # Clear the info message
+
                                 if not query_df.empty:
                                     all_query_page_data = pd.concat([all_query_page_data, query_df]) # Append page data to the combined DataFrame
                                 else:

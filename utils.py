@@ -1163,11 +1163,14 @@ def display_gsc_analytics():
                         if not query_page_df.empty:
                             st.subheader("Raw Data with Query and Page Dimensions")
                             query_page_df = query_page_df.sort_values("Clicks", ascending=False)
-                            query_page_df = query_page_df.head(20)
+                            max_page_queries = 20
+                            query_page_df = query_page_df.head(max_page_queries)
                             page_urls = query_page_df['Query'].unique()
                             
                             all_query_page_data = pd.DataFrame()
-                            for page_url in page_urls:
+                            for i, page_url in enumerate(page_urls):
+                                if i >= max_page_queries:
+                                    break
                                 info_placeholder = st.empty()  # Create a placeholder
                                 info_placeholder.info(f"Fetching data for page: {page_url}")
                                 dimensions_query = ["query"] # We only need 'query' dimension now, page is filtered
@@ -1179,6 +1182,8 @@ def display_gsc_analytics():
                                     page_add=page_url,
                                     dimensions=dimensions_query
                                 )
+                                query_df['Page'] = page_url
+                                
                                 # info_placeholder.write(f"Data fetched for page: {query_df}")
                                 time.sleep(1)
                                 info_placeholder.empty()  # Clear the info message

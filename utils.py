@@ -1167,9 +1167,9 @@ def display_gsc_analytics():
                             page_urls = query_page_df['Query'].unique()
                             
                             all_query_page_data = pd.DataFrame()
-                            for idx, page_url in page_urls:
+                            for page_url in page_urls:
                                 info_placeholder = st.empty()  # Create a placeholder
-                                info_placeholder.info(f"Fetching data for page {idx}: {page_url}")
+                                info_placeholder.info(f"Fetching data for page: {page_url}")
                                 dimensions_query = ["query"] # We only need 'query' dimension now, page is filtered
                                 query_df = load_gsc_query_data_alt(
                                     service=search_console_service,

@@ -1208,8 +1208,8 @@ def display_gsc_analytics():
 
                                 # Merge cannibalized queries with original data to get performance metrics
                                 cannibalized_queries_metrics_df = pd.merge(
-                                    cannibalized_queries_df['Query'],
-                                    query_page_df,
+                                    cannibalized_queries_df,
+                                    df_gsc,
                                     on='Query',
                                     how='inner'
                                 )
@@ -1234,6 +1234,7 @@ def display_gsc_analytics():
                                 # 3. Performance metrics summary for cannibalized queries
                                 cannibalized_summary_metrics = cannibalized_queries_metrics_df[[ 'Clicks', 'Impressions', 'CTR', 'Position']].mean().reset_index()
                                 cannibalized_summary_metrics.columns = ['Metric', 'Average Value']
+                                st.dataframe(cannibalized_summary_metrics)
 
                                 all_queries_summary_metrics = query_page_df[[ 'Clicks', 'Impressions', 'CTR', 'Position']].mean().reset_index()
                                 all_queries_summary_metrics.columns = ['Metric', 'Average Value']

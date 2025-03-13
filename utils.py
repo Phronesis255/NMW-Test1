@@ -942,7 +942,8 @@ def display_serp_details():
 
 
 # streamlit_app.py (or a file that handles your app screens)
-from gscHelpers import connect_to_search_console, load_gsc_query_data
+from gscHelpers import connect_to_search_console, load_gsc_query_data, load_gsc_query_data_alt
+
 from streamlit_oauth import OAuth2Component
 
 def display_gsc_analytics():
@@ -1150,7 +1151,7 @@ def display_gsc_analytics():
                         # # Perform clustering and visualization
                         # clustered_df = perform_kmeans_clustering(df_gsc.head(300), embeddings)
                         st.header("Cannibalized Queries Analysis")
-                        dimensions_query_page = ["query"]
+                        dimensions_query_page = ["page"]
                         query_page_df = load_gsc_query_data(
                                 service=search_console_service,
                                 site_url=chosen_site,
@@ -1162,18 +1163,20 @@ def display_gsc_analytics():
                         if not query_page_df.empty:
                             st.subheader("Raw Data with Query and Page Dimensions")
                             query_page_df = query_page_df.sort_values("Clicks", ascending=False)
-                            query_page = query_page_df.head(200)
+                            query_page_df = query_page_df.head(300)
                             page_urls = query_page_df['Query'].unique()
+                            
                             all_query_page_data = pd.DataFrame()
                             for page_url in page_urls:
                                 info_placeholder = st.empty()  # Create a placeholder
                                 info_placeholder.info(f"Fetching data for page: {page_url}")
-                                dimensions_query = ["page"] # We only need 'query' dimension now, page is filtered
-                                query_df = load_gsc_query_data(
+                                dimensions_query = ["query"] # We only need 'query' dimension now, page is filtered
+                                query_df = load_gsc_query_data_alt(
                                     service=search_console_service,
                                     site_url=chosen_site,
                                     start_date=start_date.strftime('%Y-%m-%d'),
                                     end_date=end_date.strftime('%Y-%m-%d'),
+                                    page_add=page_url,
                                     dimensions=dimensions_query
                                 )
                                 time.sleep(1)

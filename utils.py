@@ -1179,6 +1179,7 @@ def display_gsc_analytics():
                                     page_add=page_url,
                                     dimensions=dimensions_query
                                 )
+                                info_placeholder.write(f"Data fetched for page: {query_df}")
                                 time.sleep(1)
                                 info_placeholder.empty()  # Clear the info message
 

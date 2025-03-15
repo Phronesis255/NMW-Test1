@@ -212,7 +212,7 @@ def get_page_for_query(
 
             if 'rows' in response:
                 for row in response['rows']:
-                    page_val = row['page'][0]  # Because 'dimensions' = ['page']
+                    page_val = row['keys'][0]  # Because 'dimensions' = ['page']
                     clicks = row['clicks']
                     impressions = row['impressions']
                     ctr = row['ctr']

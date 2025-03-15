@@ -942,7 +942,7 @@ def display_serp_details():
 
 
 # streamlit_app.py (or a file that handles your app screens)
-from gscHelpers import connect_to_search_console, load_gsc_query_data, load_gsc_query_data_alt, attempt_silent_auth
+from gscHelpers import connect_to_search_console, load_gsc_query_data, load_gsc_query_data_alt, attempt_silent_auth, get_page_for_query
 
 from streamlit_oauth import OAuth2Component
 
@@ -1150,6 +1150,20 @@ def display_gsc_analytics():
                             use_container_width=True,
                             hide_index=True
                         )
+                        if st.button("Get Corresponding Pages", key="get_corr_pages"):
+                            dimensions_query = ["page"] # We only need 'query' dimension now, page is filtered                            
+                            for idx, row in filtered_df.iterrows():
+                                query_df = get_page_for_query(
+                                    service=search_console_service,
+                                    site_url=chosen_site,
+                                    start_date=start_date.strftime('%Y-%m-%d'),
+                                    end_date=end_date.strftime('%Y-%m-%d'),
+                                    query_in=row['Query'],
+                                    dimensions=dimensions_query
+                                )
+                                query_df['Query'] = row['Query']
+                                st.write(f"Pages for query: {row['Query']}")
+                                st.dataframe(query_df)
                         # Generate embeddings for clustering
                         # model = load_embedding_model()
                         # embeddings = model.encode(df_gsc.head(300)['Query'].tolist())

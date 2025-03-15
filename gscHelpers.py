@@ -172,3 +172,73 @@ def load_gsc_query_data_alt(
     except Exception as e:
         st.error(f"Error fetching query data: {e}")
         return pd.DataFrame(columns=['Query', 'Clicks', 'Impressions', 'CTR', 'Position'])
+
+
+def get_page_for_query(
+    service, site_url: str, start_date: str, end_date: str, query_in: str,
+    dimensions: list = ["page"], search_type: str = "web"
+) -> pd.DataFrame:
+    """
+    Retrieves page-level data from Google Search Console for a specified site,
+    date range, and dimension set, filtered by query.
+    Returns a DataFrame with columns:
+      ['Page', 'Clicks', 'Impressions', 'CTR', 'Position'].
+    """
+    page_data = []
+    request_body = {
+        'startDate': start_date,
+        'endDate': end_date,
+        'dimensions': dimensions,
+        'searchType': search_type,
+        "dimensionFilterGroups": [
+            {
+                "groupType": "and",
+                "filters": [
+                    {
+                        "dimension": "query",
+                        "operator": "contains",
+                        "expression": query_in
+                    }
+                ]
+            }
+        ]
+    }
+
+    try:
+        while True:
+            response = service.searchanalytics().query(
+                siteUrl=site_url, body=request_body
+            ).execute()
+
+            if 'rows' in response:
+                for row in response['rows']:
+                    page_val = row['page'][0]  # Because 'dimensions' = ['page']
+                    clicks = row['clicks']
+                    impressions = row['impressions']
+                    ctr = row['ctr']
+                    position = row['position']
+                    page_data.append({
+                        'Page': page_val,
+                        'Clicks': clicks,
+                        'Impressions': impressions,
+                        'CTR': ctr,
+                        'Position': position
+                    })
+            else:
+                st.info("No page data found for the selected range and query.")
+                break
+
+            # Paginate if nextPageToken exists
+            if 'nextPageToken' in response:
+                request_body['pageToken'] = response['nextPageToken']
+            else:
+                break
+
+        if page_data:
+            return pd.DataFrame(page_data)
+        else:
+            return pd.DataFrame(columns=['Page', 'Clicks', 'Impressions', 'CTR', 'Position'])
+
+    except Exception as e:
+        st.error(f"Error fetching page data: {e}")
+        return pd.DataFrame(columns=['Page', 'Clicks', 'Impressions', 'CTR', 'Position'])

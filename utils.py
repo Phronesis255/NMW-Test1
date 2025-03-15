@@ -942,7 +942,7 @@ def display_serp_details():
 
 
 # streamlit_app.py (or a file that handles your app screens)
-from gscHelpers import connect_to_search_console, load_gsc_query_data, load_gsc_query_data_alt
+from gscHelpers import connect_to_search_console, load_gsc_query_data, load_gsc_query_data_alt, attempt_silent_auth
 
 from streamlit_oauth import OAuth2Component
 
@@ -970,34 +970,40 @@ def display_gsc_analytics():
 
     # OAuth logic
     if "auth" not in st.session_state:
-        st.write("Not authenticated yet. Please log in via Google below:")
-        oauth2 = OAuth2Component(CLIENT_ID, CLIENT_SECRET, AUTHORIZE_ENDPOINT, TOKEN_ENDPOINT, TOKEN_ENDPOINT, REVOKE_ENDPOINT)
-        result = oauth2.authorize_button(
-            name="Continue with Google",
-            icon="https://www.google.com.tw/favicon.ico",
-            redirect_uri="https://needsmorewords.streamlit.app/component/streamlit_oauth.authorize_button",
-            scope="https://www.googleapis.com/auth/webmasters.readonly", #https://www.googleapis.com/auth/webmasters.readonly	
-            key="google",
-            extras_params={"prompt": "consent", "access_type": "offline"},
-            use_container_width=True,
-            pkce='S256',
-        )
-        if result:
-            # Store tokens in session state
-            st.session_state["token"] = result["token"]
-            st.write(result)
-            if "id_token" in result["token"]:
-                id_token = result["token"]["id_token"]
-                payload = id_token.split(".")[1]
-                payload += "=" * (-len(payload) % 4)
-                user_info = json.loads(base64.b64decode(payload))
-                email = user_info.get("email", "No email found")
-            else:
-                id_token = result["token"]["access_token"]
-                email = "GSC@USER"
+        silent_result = attempt_silent_auth(CLIENT_ID, SCOPES)
+        if silent_result:
+            st.session_state["token"] = silent_result["token"]
+            st.session_state["auth"] = "GSC@USER"
+            st.write(silent_result)
+        else:
+            st.write("Not authenticated yet. Please log in via Google below:")
+            oauth2 = OAuth2Component(CLIENT_ID, CLIENT_SECRET, AUTHORIZE_ENDPOINT, TOKEN_ENDPOINT, TOKEN_ENDPOINT, REVOKE_ENDPOINT)
+            result = oauth2.authorize_button(
+                name="Continue with Google",
+                icon="https://www.google.com.tw/favicon.ico",
+                redirect_uri="https://needsmorewords.streamlit.app/component/streamlit_oauth.authorize_button",
+                scope="https://www.googleapis.com/auth/webmasters.readonly", #https://www.googleapis.com/auth/webmasters.readonly	
+                key="google",
+                extras_params={"prompt": "consent", "access_type": "offline"},
+                use_container_width=True,
+                pkce='S256',
+            )
+            if result:
+                # Store tokens in session state
+                st.session_state["token"] = result["token"]
+                st.write(result)
+                if "id_token" in result["token"]:
+                    id_token = result["token"]["id_token"]
+                    payload = id_token.split(".")[1]
+                    payload += "=" * (-len(payload) % 4)
+                    user_info = json.loads(base64.b64decode(payload))
+                    email = user_info.get("email", "No email found")
+                else:
+                    id_token = result["token"]["access_token"]
+                    email = "GSC@USER"
 
-            st.session_state["auth"] = email
-            st.rerun()
+                st.session_state["auth"] = email
+                st.rerun()
 
     else:
         st.write(f"Logged in")

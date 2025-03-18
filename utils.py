@@ -1159,7 +1159,9 @@ def display_gsc_analytics():
                             hide_index=True
                         )
                         if st.button("Get Corresponding Pages", key="get_corr_pages"):
-                            dimensions_query = ["page"] # We only need 'query' dimension now, page is filtered                            
+                            dimensions_query = ["page"] # We only need 'query' dimension now, page is filtered
+                            all_query_pages = pd.DataFrame()  # Initialize an empty DataFrame to collect all pages
+                            
                             for idx, row in filtered_df.iterrows():
                                 query_df = get_page_for_query(
                                     service=search_console_service,
@@ -1170,8 +1172,23 @@ def display_gsc_analytics():
                                     dimensions=dimensions_query
                                 )
                                 query_df['Query'] = row['Query']
-                                st.write(f"Pages for query: {row['Query']}")
-                                st.dataframe(query_df)
+                                all_query_pages = pd.concat([all_query_pages, query_df], ignore_index=True)  # Append to the DataFrame
+
+                            st.write("Pages for underperforming queries:")
+                            event = st.dataframe(all_query_pages, use_container_width=True, on_select="rerun", selection_mode="single")
+
+                            # Save the selected page to session state
+                            selected_rows = event.selection.rows
+                            if selected_rows:
+                                selected_page = all_query_pages.iloc[selected_rows[0]]['page']
+                                st.success(f"Selected page: {selected_page}")
+                                # Add button to optimize the page for the selected query
+                                if st.button(f"Optimize for '{row['Query']}'", key=f"optimize_{row['Query']}"):
+                                    st.session_state['undrprfrm_pg'] = selected_page
+                                    st.session_state['selected_query'] = row['Query']
+                                    st.session_state['step'] = 'performance_analysis'
+                                    st.rerun()
+
                         # Generate embeddings for clustering
                         # model = load_embedding_model()
                         # embeddings = model.encode(df_gsc.head(300)['Query'].tolist())

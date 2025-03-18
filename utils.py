@@ -1937,34 +1937,34 @@ def display_editor():
             return "20-30"
         else:
             return "30+"
-    if 'successful_urls' in st.session_state:
-        total_kw_df = pd.DataFrame()
+    # if 'successful_urls' in st.session_state:
+    #     total_kw_df = pd.DataFrame()
+    #     successful = st.session_state['successful_urls']
+    #     for idx, url in enumerate(successful):
+    #         df_kw_ideas = get_keyword_plan_data(None, url, seed_mode="URL")
+    #         df_kw_ideas['URL'] = url
+    #         total_kw_df = pd.concat([total_kw_df, df_kw_ideas], ignore_index=True)
 
-        for idx, url in enumerate(st.session_state['successful_urls']):
-            df_kw_ideas = get_keyword_plan_data(None, url, seed_mode="URL")
-            df_kw_ideas['URL'] = url
-            total_kw_df = pd.concat([total_kw_df, df_kw_ideas], ignore_index=True)
+    #     # Aggregate the keywords
+    #     aggregated_df = total_kw_df.groupby('Keyword Text').agg({
+    #         'Average Monthly Searches': 'first',
+    #         'Competition': 'first',
+    #         'Competition Index': 'first',
+    #         'Similarity to Keyword': 'first',
+    #         'Word Count': 'first',
+    #         'Position': 'first',
+    #         'Total Score': 'first',
+    #         'URL': lambda x: ', '.join(x),
+    #     }).reset_index()
 
-        # Aggregate the keywords
-        aggregated_df = total_kw_df.groupby('Keyword Text').agg({
-            'Average Monthly Searches': 'first',
-            'Competition': 'first',
-            'Competition Index': 'first',
-            'Similarity to Keyword': 'first',
-            'Word Count': 'first',
-            'Position': 'first',
-            'Total Score': 'first',
-            'URL': lambda x: ', '.join(x),
-        }).reset_index()
+    #     # Count the number of duplicates
+    #     aggregated_df['Duplicate Count'] = total_kw_df.groupby('Keyword Text').size().values
 
-        # Count the number of duplicates
-        aggregated_df['Duplicate Count'] = total_kw_df.groupby('Keyword Text').size().values
-
-        # Display the aggregated keywords
-        st.write("Aggregated Keywords from all URLs:")
-        aggregated_df = aggregated_df.sort_values(by='Total Score', ascending=False)
-        st.dataframe(aggregated_df[['Keyword Text', 'Average Monthly Searches', 'Competition', 'Competition Index', 'Similarity to Keyword', 'Word Count', 'Position', 'Total Score', 'URL', 'Duplicate Count']])
-    # Display words to check in the sidebar
+    #     # Display the aggregated keywords
+    #     st.write("Aggregated Keywords from all URLs:")
+    #     aggregated_df = aggregated_df.sort_values(by='Total Score', ascending=False)
+    #     st.dataframe(aggregated_df[['Keyword Text', 'Average Monthly Searches', 'Competition', 'Competition Index', 'Similarity to Keyword', 'Word Count', 'Position', 'Total Score', 'URL', 'Duplicate Count']])
+    # # Display words to check in the sidebar
     with st.sidebar:
         tab1, tab2, tab3 = st.tabs(["Word Frequency", "Edit Terms", "Text Stats"])
 

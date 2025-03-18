@@ -622,6 +622,13 @@ def get_keyword_plan_data(keywords_list=None, url=None, seed_mode="KW"):
     all_keyword_ideas = []
     if seed_mode=="URL":
         # Get keyword ideas from URL seed
+        request = client.get_type("GenerateKeywordIdeasRequest")
+        request.customer_id = "8882181823"
+        request.language = language_rn
+        request.include_adult_keywords = False
+        request.keyword_plan_network = (
+            client.enums.KeywordPlanNetworkEnum.GOOGLE_SEARCH_AND_PARTNERS
+        )
         request.url_seed.url = url
         keyword_ideas = keyword_plan_idea_service.generate_keyword_ideas(request=request)
         for idx, idea in keyword_ideas.results:

@@ -633,7 +633,7 @@ def get_keyword_plan_data(keywords_list=None, url=None, seed_mode="KW"):
         keyword_ideas = keyword_plan_idea_service.generate_keyword_ideas(request=request)
         st.write(keyword_ideas)
         for idx, idea in enumerate(keyword_ideas.results):
-            if len(all_keyword_ideas) > 400:
+            if len(all_keyword_ideas) > 200:
                 break  # Changed from keyword_ideas.keyword_idea to keyword_ideas.results
             metrics = idea.keyword_idea_metrics
             comp_enum = client.enums.KeywordPlanCompetitionLevelEnum.KeywordPlanCompetitionLevel

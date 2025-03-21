@@ -11,7 +11,6 @@ RUN apt-get update && apt-get install -y \
     git \
     gcc \
     libopenblas-dev \
-    unzip \
     liblapack-dev \
     python3-dev \
     gfortran \
@@ -30,14 +29,6 @@ RUN pip install numpy==1.22.0
 # Install Python dependencies
 RUN pip install -r requirements.txt
 
-
-# Download, unzip GloVe, and remove the zip file
-RUN curl -O http://nlp.stanford.edu/data/glove.6B.zip \
-&& unzip glove.6B.zip \
-&& rm glove.6B.zip 
-
-#Remove unnecessary files
-RUN rm glove.6B.300d.txt glove.6B.50d.txt glove.6B.200d.txt
 
 # Copy the rest of the application code
 COPY . /app

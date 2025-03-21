@@ -20,17 +20,3 @@ Let's you know what topics and words you need to include in your content and sug
 3. Run with Docker:
 
 https://docs.streamlit.io/deploy/tutorials/docker
-
-
-4. Download the GloVe embedding file and put it in the same folder as the main app:
-   ```
-      # Download the GloVe zip file
-   curl -O http://nlp.stanford.edu/data/glove.6B.zip
-   
-   # Unzip the downloaded file
-   unzip glove.6B.zip
-   
-   # Remove the zip file
-   rm glove.6B.zip
-   ```
-   We only need "glove.6B.100d.txt" so you can also remove the other embedding files in the zip.

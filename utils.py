@@ -973,7 +973,7 @@ def display_gsc_analytics():
         return
     AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/auth"
     TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-    REVOKE_ENDPOINT = None
+    REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
     SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
 
     # OAuth logic
@@ -987,7 +987,7 @@ def display_gsc_analytics():
             st.write("passed silent auth")
         else:
             st.write("Not authenticated yet. Please log in via Google below:")
-            oauth2 = OAuth2Component(CLIENT_ID, CLIENT_SECRET, AUTHORIZE_ENDPOINT, TOKEN_ENDPOINT, TOKEN_ENDPOINT, REVOKE_ENDPOINT)
+            oauth2 = OAuth2Component(CLIENT_ID, CLIENT_SECRET, AUTHORIZE_ENDPOINT, TOKEN_ENDPOINT, TOKEN_ENDPOINT)
             result = oauth2.authorize_button(
                 name="Continue with Google",
                 icon="https://www.google.com.tw/favicon.ico",

@@ -973,7 +973,7 @@ def display_gsc_analytics():
         return
     AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/auth"
     TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-    REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
+    REVOKE_ENDPOINT = None
     SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
 
     # OAuth logic

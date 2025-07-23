@@ -985,7 +985,6 @@ def display_gsc_analytics():
         #     st.write(silent_result)
         if False:
             st.write("passed silent auth")
-            
         else:
             st.write("Not authenticated yet. Please log in via Google below:")
             oauth2 = OAuth2Component(CLIENT_ID, CLIENT_SECRET, AUTHORIZE_ENDPOINT, TOKEN_ENDPOINT, TOKEN_ENDPOINT, REVOKE_ENDPOINT)

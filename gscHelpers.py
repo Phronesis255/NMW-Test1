@@ -7,25 +7,25 @@ import pandas as pd
 import requests
 
 def attempt_silent_auth(client_id, scopes):
-    """
-    Attempts to silently authenticate the user using an existing Google session.
-    If successful, returns an access token; otherwise, returns None.
-    """
-    auth_url = (
-        f"https://accounts.google.com/o/oauth2/v2/auth?"
-        f"client_id={client_id}"
-        f"&response_type=token"
-        f"&scope={' '.join(scopes)}"
-        f"&redirect_uri=postmessage"
-        f"&prompt=none"
-    )
+    # """
+    # Attempts to silently authenticate the user using an existing Google session.
+    # If successful, returns an access token; otherwise, returns None.
+    # """
+    # auth_url = (
+    #     f"https://accounts.google.com/o/oauth2/v2/auth?"
+    #     f"client_id={client_id}"
+    #     f"&response_type=token"
+    #     f"&scope={' '.join(scopes)}"
+    #     f"&redirect_uri=postmessage"
+    #     f"&prompt=none"
+    # )
 
-    try:
-        response = requests.get(auth_url)
-        if response.status_code == 200 and "access_token" in response.json():
-            return response.json().get("access_token")
-    except Exception as e:
-        print(f"Silent authentication failed: {e}")
+    # try:
+    #     response = requests.get(auth_url)
+    #     if response.status_code == 200 and "access_token" in response.json():
+    #         return response.json().get("access_token")
+    # except Exception as e:
+    #     print(f"Silent authentication failed: {e}")
 
     return None  # Return None if silent auth fails
 

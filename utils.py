@@ -1017,7 +1017,6 @@ def display_gsc_analytics():
                 CLIENT_ID, CLIENT_SECRET,
                 SCOPE
             )
-            st.write(search_console_service)
             if search_console_service:
                 st.success("Connected to GSC! Now you can list your sites or query data.")
                 
@@ -1160,7 +1159,7 @@ def display_gsc_analytics():
                                 all_query_pages = pd.concat([all_query_pages, query_df], ignore_index=True)  # Append to the DataFrame
 
                             st.write("Pages for underperforming queries:")
-                            event = st.dataframe(all_query_pages, use_container_width=True, on_select="rerun", selection_mode="single")
+                            event = st.dataframe(all_query_pages, use_container_width=True, on_select="rerun", selection_mode="single-row")
 
                             # Save the selected page to session state
                             selected_rows = event.selection.rows

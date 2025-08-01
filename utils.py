@@ -1003,7 +1003,336 @@ def display_gsc_analytics():
                 st.error(f"Token exchange failed: {resp.text}")
     else:
         st.write("Logged in!")
-        st.write(st.session_state["token"])
+        # st.write(st.session_state["token"])
+
+        # Retrieve tokens from session
+        if "token" in st.session_state:
+            token = st.session_state["token"]
+            access_token = token["access_token"]
+            refresh_token = token.get("refresh_token", None)
+
+            # Connect to GSC
+            search_console_service = connect_to_search_console(
+                access_token, refresh_token,
+                CLIENT_ID, CLIENT_SECRET,
+                SCOPES
+            )
+
+            if search_console_service:
+                st.success("Connected to GSC! Now you can list your sites or query data.")
+                
+                # List Websites (i.e., site URL properties)
+                if st.button("List My Websites"):
+                    try:
+                        response = search_console_service.sites().list().execute()
+                        site_entries = response.get('siteEntry', [])
+                        if site_entries:
+                            st.write("Your GSC Websites:")
+                            for s in site_entries:
+                                st.write(f"• {s['siteUrl']}")
+
+                            # Optionally store the first site in session
+                            st.session_state["site_url"] = site_entries[0]['siteUrl']
+                        else:
+                            st.warning("No websites found in your Search Console account.")
+                    except Exception as e:
+                        st.error(f"Error listing websites: {e}")
+
+                # If a site is already chosen, let user pick date range & fetch queries
+                chosen_site = st.session_state.get("site_url", None)
+                if chosen_site:
+                    st.write(f"Selected site: {chosen_site}")
+
+                    # Date inputs
+                    start_date = st.date_input("Start Date", value=pd.to_datetime('2025-01-01'))
+                    end_date = st.date_input("End Date", value=pd.to_datetime('2025-03-01'))
+
+                    # Check if GSC data is already in session state
+                    if "gsc_query_df" in st.session_state:
+                        df = st.session_state["gsc_query_df"]
+                        st.write("Using cached Query Data:")
+                    else:
+                        if st.button("Get Query Data"):
+                            # Clear the screen
+                            st.empty()
+
+                            df = load_gsc_query_data(
+                                service=search_console_service,
+                                site_url=chosen_site,
+                                start_date=start_date.strftime('%Y-%m-%d'),
+                                end_date=end_date.strftime('%Y-%m-%d')
+                            )
+                            if not df.empty:
+                                # Store the full DF in session_state
+                                st.session_state["gsc_query_df"] = df
+                            else:
+                                st.warning("No query data was returned.")
+                                return  # Exit if no data is returned
+                        else:
+                            return  # Wait for the button to be pressed
+
+                    df_gsc = df.copy()
+                    st.subheader("Underperforming Keywords Analysis")
+
+                    # ----- (A) Basic aggregator approach -----
+                    # For demonstration, let's define a few bins for 'position'
+                    # and compute the average CTR for each bin as a reference:
+                    position_bins = [0, 1, 3, 6, 10, 100]
+                    bin_labels = ["pos1", "pos2-3", "pos4-6", "pos7-10", "pos10+"]
+                    df_gsc["position_bin"] = pd.cut(df_gsc["Position"], bins=position_bins, labels=bin_labels)
+                    bin_ctr = df_gsc.groupby("position_bin", observed=True)["CTR"].mean()
+
+                    # Filter to queries with enough impressions to matter, e.g. >= 100
+                    df_filtered = df_gsc[df_gsc["Impressions"] >= 100].copy()
+
+                    def underperforming(row):
+                        """
+                        Mark a query as 'underperforming' if CTR < 50% of the bin's average CTR.
+                        """
+                        bin_label = row["position_bin"]
+                        if pd.isnull(bin_label):
+                            return False
+                        baseline = bin_ctr.get(bin_label, np.nan)
+                        if np.isnan(baseline):
+                            return False
+                        if row["Position"] > 25:
+                            return False
+                        return row["CTR"] < 0.5 * baseline
+
+                    df_filtered["Is_Underperforming"] = df_filtered.apply(underperforming, axis=1)
+
+                    # Merge Is_Underperforming into df_gsc
+                    df_gsc = df_gsc.merge(df_filtered[["Query", "Is_Underperforming"]], on="Query", how="left")
+                    df_gsc["Is_Underperforming"] = df_gsc["Is_Underperforming"].fillna(False, downcast='infer')
+                    # Sort by Impressions descending
+                    df_underperf = df_filtered[df_filtered["Is_Underperforming"]].sort_values("Impressions", ascending=False)
+                    
+                    if not df_underperf.empty:
+                        st.write("Underperforming Queries (CTR < 50% of average for their position):")
+
+                        # Define column configuration
+                        column_configuration = {
+                            "Query": st.column_config.TextColumn(disabled=True),
+                            "Impressions": st.column_config.NumberColumn(disabled=True),
+                            "CTR": st.column_config.NumberColumn(disabled=True),
+                            "Position": st.column_config.NumberColumn(disabled=True),
+                            "Is_Underperforming": st.column_config.CheckboxColumn(disabled=True),
+                        }
+
+                        # Display the DataFrame with multi-row selection
+                        event = st.dataframe(
+                            df_underperf,
+                            column_config=column_configuration,
+                            use_container_width=True,
+                            hide_index=True,
+                            on_select="rerun",
+                            selection_mode="multi-row",
+                        )
+
+                        # Get selected rows
+                        selected_rows = event.selection.rows
+
+                        # Filter the DataFrame based on selected rows
+                        filtered_df = df_underperf.iloc[selected_rows]
+
+                        # Display selected rows
+                        st.header("Selected Underperforming Queries")
+                        st.dataframe(
+                            filtered_df,
+                            column_config=column_configuration,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        if st.button("Get Corresponding Pages", key="get_corr_pages"):
+                            dimensions_query = ["page"] # We only need 'query' dimension now, page is filtered
+                            all_query_pages = pd.DataFrame()  # Initialize an empty DataFrame to collect all pages
+                            
+                            for idx, row in filtered_df.iterrows():
+                                query_df = get_page_for_query(
+                                    service=search_console_service,
+                                    site_url=chosen_site,
+                                    start_date=start_date.strftime('%Y-%m-%d'),
+                                    end_date=end_date.strftime('%Y-%m-%d'),
+                                    query_in=row['Query'],
+                                    dimensions=dimensions_query
+                                )
+                                query_df['Query'] = row['Query']
+                                all_query_pages = pd.concat([all_query_pages, query_df], ignore_index=True)  # Append to the DataFrame
+
+                            st.write("Pages for underperforming queries:")
+                            event = st.dataframe(all_query_pages, use_container_width=True, on_select="rerun", selection_mode="single")
+
+                            # Save the selected page to session state
+                            selected_rows = event.selection.rows
+                            if selected_rows:
+                                selected_page = all_query_pages.iloc[selected_rows[0]]['page']
+                                st.success(f"Selected page: {selected_page}")
+                                # Add button to optimize the page for the selected query
+                                if st.button(f"Optimize for '{row['Query']}'", key=f"optimize_{row['Query']}"):
+                                    st.session_state['undrprfrm_pg'] = selected_page
+                                    st.session_state['selected_query'] = row['Query']
+                                    st.session_state['step'] = 'performance_analysis'
+                                    st.rerun()
+
+                        # Generate embeddings for clustering
+                        # model = load_embedding_model()
+                        # embeddings = model.encode(df_gsc.head(300)['Query'].tolist())
+
+                        # # Perform clustering and visualization
+                        # clustered_df = perform_kmeans_clustering(df_gsc.head(300), embeddings)
+                        st.header("Cannibalized Queries Analysis")
+                        dimensions_query_page = ["page"]
+                        query_page_df = load_gsc_query_data(
+                                service=search_console_service,
+                                site_url=chosen_site,
+                                start_date=start_date.strftime('%Y-%m-%d'),
+                                end_date=end_date.strftime('%Y-%m-%d'),
+                                dimensions=dimensions_query_page
+                            )
+
+                        if not query_page_df.empty:
+                            st.subheader("Raw Data with Query and Page Dimensions")
+                            query_page_df = query_page_df.sort_values("Clicks", ascending=False)
+                            max_page_queries = 20
+                            query_page_df = query_page_df.head(max_page_queries)
+                            page_urls = query_page_df['Query'].unique()
+                            
+                            all_query_page_data = pd.DataFrame()
+                            for i, page_url in enumerate(page_urls):
+                                if i >= max_page_queries:
+                                    break
+                                info_placeholder = st.empty()  # Create a placeholder
+                                info_placeholder.info(f"Fetching data for page: {page_url}")
+                                dimensions_query = ["query"] # We only need 'query' dimension now, page is filtered
+                                query_df = load_gsc_query_data_alt(
+                                    service=search_console_service,
+                                    site_url=chosen_site,
+                                    start_date=start_date.strftime('%Y-%m-%d'),
+                                    end_date=end_date.strftime('%Y-%m-%d'),
+                                    page_add=page_url,
+                                    dimensions=dimensions_query
+                                )
+                                query_df['Page'] = page_url
+                                
+                                # info_placeholder.write(f"Data fetched for page: {query_df}")
+                                time.sleep(1)
+                                info_placeholder.empty()  # Clear the info message
+
+                                if not query_df.empty:
+                                    all_query_page_data = pd.concat([all_query_page_data, query_df]) # Append page data to the combined DataFrame
+                                else:
+                                    st.info(f"No data returned for page: {page_url}")
+
+                        if not all_query_page_data.empty:
+                            st.subheader("Raw Data (Page-by-Page Queries)")
+                            st.dataframe(all_query_page_data)
+
+                            if st.button("Analyze Keyword Cannibalization", key="cannibalization_analysis"):
+                                # Identify cannibalized queries (queries associated with multiple pages)
+                                query_page_grouped = all_query_page_data.groupby('Query')['Page'].nunique().reset_index()
+                                query_page_grouped.columns = ['Query', 'Unique_Page_Count']
+                                cannibalized_queries_df = query_page_grouped[query_page_grouped['Unique_Page_Count'] > 1]
+
+                                if not cannibalized_queries_df.empty:
+                                    st.subheader("Cannibalized Queries")
+                                    st.dataframe(cannibalized_queries_df)
+
+                                    # Merge cannibalized queries with original data to get performance metrics
+                                    cannibalized_queries_metrics_df = pd.merge(
+                                        cannibalized_queries_df,
+                                        df_gsc,
+                                        on='Query',
+                                        how='inner'
+                                    )
+
+                                    st.subheader("Performance Metrics for Cannibalized Queries")
+                                    st.dataframe(cannibalized_queries_metrics_df)
+
+                                    # --- Visualizations ---
+                                    st.subheader("Visualizations")
+
+                                    # 1. Bar chart of number of cannibalized queries
+                                    fig_cannibalized_count = px.bar(
+                                        x=['Cannibalized Queries', 'Non-Cannibalized Queries'],
+                                        y=[len(cannibalized_queries_df), len(query_page_grouped) - len(cannibalized_queries_df)],
+                                        title="Number of Cannibalized vs. Non-Cannibalized Queries",
+                                        labels={'y': 'Number of Queries', 'x': 'Query Type'}
+                                    )
+                                    st.plotly_chart(fig_cannibalized_count)
+
+                                    # 2. Table of cannibalized queries and their page counts (already displayed as dataframe)
+
+                                    # 3. Performance metrics summary for cannibalized queries
+                                    cannibalized_summary_metrics = cannibalized_queries_metrics_df[[ 'Clicks', 'Impressions', 'CTR', 'Position']].mean().reset_index()
+                                    cannibalized_summary_metrics.columns = ['Metric', 'Average Value']
+                                    st.dataframe(cannibalized_summary_metrics)
+
+                                    all_queries_summary_metrics = query_page_df[[ 'Clicks', 'Impressions', 'CTR', 'Position']].mean().reset_index()
+                                    all_queries_summary_metrics.columns = ['Metric', 'Average Value']
+
+                                    summary_metrics_comparison = pd.DataFrame({
+                                        'Metric': all_queries_summary_metrics['Metric'],
+                                        'All Queries': all_queries_summary_metrics['Average Value'].round(2),
+                                        'Cannibalized Queries': cannibalized_summary_metrics['Average Value'].round(2) if not cannibalized_summary_metrics.empty else [0,0,0,0]
+                                    })
+
+                                    st.subheader("Comparison of Average Performance Metrics")
+                                    st.dataframe(summary_metrics_comparison)
+
+                                    # 4. Distribution of unique page counts per query
+                                    fig_page_count_distribution = px.histogram(
+                                        query_page_grouped,
+                                        x='Unique_Page_Count',
+                                        title="Distribution of Unique Page Counts per Query",
+                                        labels={'Unique_Page_Count': 'Number of Unique Pages'}
+                                    )
+                                    st.plotly_chart(fig_page_count_distribution)
+
+
+                                    st.subheader("Detailed List of Cannibalized Queries and Pages")
+                                    expanded_cannibalized_data = pd.merge(
+                                        cannibalized_queries_df['Query'],
+                                        query_page_df,
+                                        on='Query',
+                                        how='inner'
+                                    )
+                                    st.dataframe(expanded_cannibalized_data)
+
+                                else:
+                                    st.info("No cannibalized queries found in the selected date range.")
+
+                        else:
+                            st.info("No query data found for the selected date range.")
+
+                    else:
+                        st.info("No underperforming queries found.")
+
+                    # Show a scatter plot: Position vs. CTR, bubble sized by Impressions
+                    st.markdown("### Position vs CTR (All Queries)")
+
+                    # Create chart with modified color encoding
+                    chart = alt.Chart(df_gsc).mark_circle().encode(
+                        x=alt.X("Position:Q", title="Position"),
+                        y=alt.Y("CTR:Q", title="CTR"),
+                        size=alt.Size("Impressions:Q", scale=alt.Scale(range=[10,400])),
+                        color=alt.Color('Is_Underperforming:N',
+                            scale=alt.Scale(
+                                domain=[True, False],
+                                range=['coral', 'teal']
+                            )
+                        ),
+                        tooltip=["Query", "Impressions", "CTR", "Position", "Is_Underperforming"]
+                    ).properties(width=700, height=400).interactive()
+                    
+                    st.altair_chart(chart, use_container_width=True)
+
+                    # ----- Return button -----
+                    if st.button("Return to Main"):
+                        st.session_state['step'] = 'analysis'
+                        st.rerun()
+                else:
+                    st.error("Failed to connect to GSC with given credentials.")
+
        
 def filter_terms(terms):
     """Filter out numeric, stopword, or other low-value tokens."""

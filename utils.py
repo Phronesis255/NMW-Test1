@@ -1003,7 +1003,7 @@ def display_gsc_analytics():
                 st.error(f"Token exchange failed: {resp.text}")
     else:
         st.write("Logged in!")
-        st.write(token_data)
+        st.write(st.session_state["token"])
        
 def filter_terms(terms):
     """Filter out numeric, stopword, or other low-value tokens."""

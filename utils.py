@@ -952,7 +952,7 @@ def display_serp_details():
 # streamlit_app.py (or a file that handles your app screens)
 from gscHelpers import connect_to_search_console, load_gsc_query_data, load_gsc_query_data_alt, attempt_silent_auth, get_page_for_query
 
-from streamlit_oauth import OAuth2Component
+# from streamlit_oauth import OAuth2Component
 
 import urllib.parse
 
@@ -1003,7 +1003,7 @@ def display_gsc_analytics():
     else:
         st.write("Logged in!")
         # ...rest of your GSC logic...
-        
+
 def filter_terms(terms):
     """Filter out numeric, stopword, or other low-value tokens."""
     custom_stopwords = set([

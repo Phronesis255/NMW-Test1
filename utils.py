@@ -1003,7 +1003,7 @@ def display_gsc_analytics():
                 st.error(f"Token exchange failed: {resp.text}")
     else:
         st.write("Logged in!")
-        # st.write(st.session_state["token"])
+        st.write(st.session_state["token"])
 
         # Retrieve tokens from session
         if "token" in st.session_state:

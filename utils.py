@@ -1015,7 +1015,7 @@ def display_gsc_analytics():
             search_console_service = connect_to_search_console(
                 access_token, refresh_token,
                 CLIENT_ID, CLIENT_SECRET,
-                SCOPES
+                SCOPE
             )
 
             if search_console_service:

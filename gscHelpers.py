@@ -37,8 +37,8 @@ def connect_to_search_console(access_token, refresh_token, client_id, client_sec
                             client_id=client_id,
                             client_secret=client_secret,
                             scopes=scopes,
-                            revoke_token_uri='https://oauth2.googleapis.com/revoke',
-                            revoke_token_auth_method='client_secret_post')  # Add this line
+                            revoke_token_endpoint='https://oauth2.googleapis.com/revoke',
+                            revocation_endpoint_auth_method='client_secret_post')  # Add this line
 
         service = build('searchconsole', 'v1', credentials=creds)
         print("Successfully connected to Google Search Console API.")

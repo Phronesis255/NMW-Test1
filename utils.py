@@ -961,13 +961,15 @@ def display_gsc_analytics():
 
     CLIENT_ID = st.secrets.get('CLIENT_ID')
     CLIENT_SECRET = st.secrets.get('CLIENT_SECRET')
-    REDIRECT_URI = "https://needsmorewords.streamlit.app"  # Set this in Google Cloud Console
+    REDIRECT_URI = "https://needsmorewords.streamlit.app"
     SCOPE = "https://www.googleapis.com/auth/webmasters.readonly"
     AUTHORIZE_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
     TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 
+    # Use the new st.query_params API
+    code = st.query_params.get("code", None)
+
     if "auth" not in st.session_state:
-        # Step 1: Show login link
         params = {
             "client_id": CLIENT_ID,
             "redirect_uri": REDIRECT_URI,
@@ -980,10 +982,7 @@ def display_gsc_analytics():
         st.write("Not authenticated yet. Please log in via Google below:")
         st.markdown(f"[Login with Google]({auth_url})")
 
-        # Step 2: User pastes code from redirect URL
-        code = st.text_input("Paste the code from the URL after login:")
         if code:
-            # Step 3: Exchange code for tokens
             data = {
                 "code": code,
                 "client_id": CLIENT_ID,
@@ -997,13 +996,15 @@ def display_gsc_analytics():
                 st.session_state["token"] = token_data
                 st.session_state["auth"] = "GSC@USER"
                 st.success("Authenticated!")
+                # Clear the code from the URL using st.query_params.clear()
+                st.query_params.clear()
                 st.rerun()
             else:
                 st.error(f"Token exchange failed: {resp.text}")
     else:
         st.write("Logged in!")
-        # ...rest of your GSC logic...
-
+        st.write(token_data)
+       
 def filter_terms(terms):
     """Filter out numeric, stopword, or other low-value tokens."""
     custom_stopwords = set([

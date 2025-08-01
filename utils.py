@@ -1010,7 +1010,7 @@ def display_gsc_analytics():
             token = st.session_state["token"]
             access_token = token["access_token"]
             refresh_token = token.get("refresh_token", None)
-
+            st.write("Connecting to GSC")
             # Connect to GSC
             search_console_service = connect_to_search_console(
                 access_token, refresh_token,
@@ -1333,7 +1333,8 @@ def display_gsc_analytics():
                 else:
                     st.error("Failed to connect to GSC with given credentials.")
 
-       
+        else:
+            st.write("Oh oh")
 def filter_terms(terms):
     """Filter out numeric, stopword, or other low-value tokens."""
     custom_stopwords = set([

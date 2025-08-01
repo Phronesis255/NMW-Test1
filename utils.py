@@ -1017,7 +1017,7 @@ def display_gsc_analytics():
                 CLIENT_ID, CLIENT_SECRET,
                 SCOPE
             )
-
+            st.write(search_console_service)
             if search_console_service:
                 st.success("Connected to GSC! Now you can list your sites or query data.")
                 

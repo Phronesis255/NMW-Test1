@@ -1373,25 +1373,32 @@ def perform_analysis(keyword):
     """Refactored function using logic consistent with the React+FastAPI version,
        but preserving EXACT st.session_state keys and formats used in the original code.
     """
+    if 'words_to_check' not in st.session_state:
+        st.session_state['words_to_check'] = []
+
     start_time = time.time()
-    user_email = st.session_state["username"] or "guest" # or "user_id" if you have it
+    user_email = st.session_state.get("username", "guest")  # or "user_id" if you have it
 
     status_placeholder = st.empty()  # Create a placeholder for dynamic updates
     status_placeholder.info('Retrieving top search results...')
+    st.write(f"Keyword: {keyword}")
 
     st.session_state['keyword'] = keyword
     st.session_state['serp_contents'] = []  # NEW: store structured data
 
     api_key = os.getenv("API_KEY")
     cse_id = os.getenv("CSE_ID")
+    st.write(f"API Key: {api_key}, CSE ID: {cse_id}")
 
     # 1) Retrieve search items
     results = google_custom_search(keyword, api_key, cse_id, num_results=35)
+    st.write(f"Search results: {results}")
     if not results:
         status_placeholder.error('No results found.')
         return
 
     top_urls = [item['link'] for item in results if 'link' in item]
+    st.write(f"Top URLs: {top_urls}")
     if not top_urls:
         status_placeholder.error('No URLs found.')
         return
@@ -1412,6 +1419,7 @@ def perform_analysis(keyword):
         progress.progress(idx / len(top_urls))
         status_placeholder.info(f"Retrieving content from {url}...")
         t, content, favicon_url, heads, soup = extract_content_from_url(url, extract_headings=True)
+        st.write(f"URL: {url}, Title: {t}, Content Length: {len(content) if content else 0}")
         if t is None:
             t = "No Title"
 
@@ -1450,6 +1458,10 @@ def perform_analysis(keyword):
     st.session_state['successful_urls'] = successful_urls
     progress.empty()
     status_placeholder.empty()  # Remove the last message after completion
+    st.write(f"Retrieved Content: {retrieved_content}")
+    st.write(f"Successful URLs: {successful_urls}")
+    st.write(f"Brand Names: {brand_names}")
+
     # store brand names
     st.session_state['brands'] = list(brand_names)
 
@@ -1462,9 +1474,11 @@ def perform_analysis(keyword):
     else:
         ideal_count = 1000
     st.session_state['ideal_word_count'] = ideal_count
+    st.write(f"Ideal Word Count: {ideal_count}")
 
     # 3) Clean and lemmatize
     docs_lemmatized = [lemmatize_text(doc) for doc in retrieved_content]
+    st.write(f"Lemmatized Documents: {docs_lemmatized}")
 
     # 5) Display top search results
     st.subheader('Top Search Results')
@@ -1503,6 +1517,7 @@ def perform_analysis(keyword):
 
     feature_names = tfidf_vectorizer.get_feature_names_out()
     filtered_feats = filter_terms(feature_names)
+    st.write(f"Filtered Features: {filtered_feats}")
 
     # filter the matrices
     idxs = [i for i, term in enumerate(feature_names) if term in filtered_feats]
@@ -1539,6 +1554,12 @@ def perform_analysis(keyword):
     top_tfidf    = [avg_tfidf[i] for i in top_idx]
     top_tf       = [avg_tf[i] for i in top_idx]
     top_sim      = [similarities[i] for i in top_idx]
+
+    st.write(f"Top Terms: {top_terms}")
+    st.write(f"Top Combined Scores: {top_combined}")
+    st.write(f"Top TF-IDF Scores: {top_tfidf}")
+    st.write(f"Top TF Scores: {top_tf}")
+    st.write(f"Top Similarities: {top_sim}")
 
     # 8) Store in session_state
     # chart_data => DataFrame with columns: Terms, Combined Score, Average TF-IDF Score, Similarity to Keyword
@@ -1595,8 +1616,9 @@ def perform_analysis(keyword):
 
     elapsed_time = time.time() - start_time
     print(f"Time taken for analysis: {elapsed_time:.2f} seconds")
-
+    st.write(f"Time taken for analysis: {elapsed_time:.2f} seconds")
 def display_editor():
+    words_to_check = st.session_state.get('words_to_check', [])    
     # Add a button to start a new analysis
     if st.button('Start a New Analysis'):
         st.session_state.clear()

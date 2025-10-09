@@ -84,6 +84,7 @@ def main_app():
         st.session_state['step'] = 'analysis'
         st.rerun()
 
+
 def main():
     """
     Entry point: Show the st_login_form if not authenticated.

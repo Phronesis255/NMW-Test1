@@ -31,7 +31,6 @@ def attempt_silent_auth(client_id, scopes):
 
 def connect_to_search_console(access_token, refresh_token, client_id, client_secret, scopes):
     try:
-        st.write("hey")
         creds = Credentials(token=access_token,
                             refresh_token=refresh_token,
                             token_uri='https://oauth2.googleapis.com/token',

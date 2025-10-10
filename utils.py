@@ -1096,7 +1096,7 @@ def display_gsc_analytics():
                             return False
                         if row["Position"] > 25:
                             return False
-                        return row["CTR"] < 0.5 * baseline
+                        return row["CTR"] < 0.35 * baseline
 
                     df_filtered["Is_Underperforming"] = df_filtered.apply(underperforming, axis=1)
 
